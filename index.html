@@ -1,0 +1,3102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<script>
+(function () {
+  var stored = localStorage.getItem("sbl-essay-color-mode");
+  var legacy = localStorage.getItem("sbl-essay-theme");
+  var mode = stored === "light" || stored === "dark" ? stored : null;
+  if (!mode && legacy === "paper") mode = "light";
+  if (!mode && (legacy === "tokyo" || legacy === "dracula" || legacy === "midnight" || legacy === "sepia")) mode = "dark";
+  if (!mode) {
+    mode = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  }
+  document.documentElement.setAttribute("data-theme", mode);
+})();
+</script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agents, Erlang, and the Arithmetic of Invariants — ShunyaBar Labs</title>
+<meta name="description" content="Agent harnesses are in their CODASYL era: mutable workflow DAGs compensating for lawless state. Like Codd's relational algebra, invariant-preserving harness composition is the substrate shift that scales." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<script async defer src="https://beampipe.io/js/tracker.js" data-beampipe-domain="sethuiyer.github.io"></script>
+
+
+<!-- KaTeX: CSS, then JS in document order via defer, then init on DOMContentLoaded -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
+
+<!-- Prism: Elixir + Bash syntax highlighting (Dracula-tuned via custom CSS below) -->
+<script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-clike.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-elixir.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-bash.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script defer src="essay-viz.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    if (typeof renderMathInElement === "function") {
+      renderMathInElement(document.body, {
+        delimiters: [
+          { left: "$$", right: "$$", display: true },
+          { left: "\\[", right: "\\]", display: true },
+          { left: "$", right: "$", display: false },
+          { left: "\\(", right: "\\)", display: false }
+        ],
+        throwOnError: false,
+        errorColor: "#ff5555"
+      });
+    }
+    if (typeof Prism !== "undefined" && typeof Prism.highlightAll === "function") {
+      Prism.highlightAll();
+    }
+  });
+</script>
+
+<style>
+  /* -------- Theme tokens: light = Paper, dark = Tokyo Night -------- */
+  :root,
+  [data-theme="light"] {
+    color-scheme: light;
+    --bg:        #faf8f5;
+    --bg-2:      #f3f0ea;
+    --bg-3:      #ebe6dc;
+    --line:      #d4cfc4;
+    --rule:      #e0dcd3;
+    --rule-2:    #c8c2b6;
+    --fg:        #1a1814;
+    --fg-2:      #3d3a34;
+    --fg-3:      #7a7468;
+    --pink:      #a8326e;
+    --purple:    #5c3d8f;
+    --cyan:      #2a6f7f;
+    --green:     #2a6b47;
+    --yellow:    #7a6420;
+    --orange:    #a85a1e;
+    --red:       #b52b2b;
+    --accent:    var(--pink);
+    --accent-2:  var(--purple);
+    --shadow: 0 1px 0 rgba(0,0,0,0.06), 0 16px 40px -20px rgba(0,0,0,0.12);
+    --glow-purple: rgba(92,61,143,0.08);
+    --glow-pink:   rgba(168,50,110,0.06);
+    --glow-cyan:   rgba(42,111,127,0.05);
+    --noise-alpha: 0.03;
+    --tint-red:    rgba(181,43,43,0.06);
+    --tint-green:  rgba(42,107,71,0.06);
+    --tint-card:   rgba(92,61,143,0.07);
+    --tint-card-2: rgba(168,50,110,0.04);
+    --tint-cap-1:  rgba(92,61,143,0.12);
+    --tint-cap-2:  rgba(168,50,110,0.08);
+    --tint-cap-bd: rgba(168,50,110,0.16);
+    --tint-cap-bg: rgba(92,61,143,0.06);
+    --tint-cite-bg: rgba(92,61,143,0.10);
+    --tint-cite-bd: rgba(92,61,143,0.16);
+    --tint-biblio: rgba(92,61,143,0.06);
+    --tint-note:   rgba(92,61,143,0.05);
+    --sigil-fade:  rgba(168,50,110,0.12);
+    --dropcap-glow: rgba(168,50,110,0.18);
+  }
+
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg:        #1a1b26;
+    --bg-2:      #16161e;
+    --bg-3:      #24283b;
+    --line:      #414868;
+    --rule:      #292e42;
+    --rule-2:    #565f89;
+    --fg:        #c0caf5;
+    --fg-2:      #a9b1d6;
+    --fg-3:      #565f89;
+    --pink:      #f7768e;
+    --purple:    #bb9af7;
+    --cyan:      #7dcfff;
+    --green:     #9ece6a;
+    --yellow:    #e0af68;
+    --orange:    #ff9e64;
+    --red:       #f7768e;
+    --accent:    var(--purple);
+    --accent-2:  var(--cyan);
+    --shadow: 0 1px 0 rgba(0,0,0,0.35), 0 16px 40px -20px rgba(26,27,38,0.85);
+    --glow-purple: rgba(187,154,247,0.14);
+    --glow-pink:   rgba(247,118,142,0.09);
+    --glow-cyan:   rgba(125,207,255,0.07);
+    --noise-alpha: 0.04;
+    --tint-red:    rgba(247,118,142,0.06);
+    --tint-green:  rgba(158,206,106,0.06);
+    --tint-card:   rgba(187,154,247,0.10);
+    --tint-card-2: rgba(125,207,255,0.05);
+    --tint-cap-1:  rgba(187,154,247,0.18);
+    --tint-cap-2:  rgba(125,207,255,0.12);
+    --tint-cap-bd: rgba(122,162,247,0.20);
+    --tint-cap-bg: rgba(187,154,247,0.07);
+    --tint-cite-bg: rgba(187,154,247,0.15);
+    --tint-cite-bd: rgba(187,154,247,0.22);
+    --tint-biblio: rgba(122,162,247,0.07);
+    --tint-note:   rgba(125,207,255,0.05);
+    --sigil-fade:  rgba(187,154,247,0.16);
+    --dropcap-glow: rgba(187,154,247,0.28);
+  }
+
+  * { box-sizing: border-box; }
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 92px;
+    background: var(--bg);
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: "Newsreader", Georgia, serif;
+    font-optical-sizing: auto;
+    font-weight: 400;
+    font-size: 19px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    background-image:
+      radial-gradient(circle at 18% 8%, var(--glow-purple), transparent 42%),
+      radial-gradient(circle at 82% 92%, var(--glow-pink), transparent 45%),
+      radial-gradient(circle at 50% 50%, var(--glow-cyan), transparent 60%),
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.045 0'/></filter><rect width='220' height='220' filter='url(%23n)'/></svg>");
+    background-attachment: fixed;
+  }
+
+  ::selection { background: var(--pink); color: var(--bg); }
+
+  .page { max-width: 1240px; margin: 0 auto; padding: 0 32px; }
+
+  /* Top bar */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 80;
+    isolation: isolate;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 22px 0 18px;
+    border-bottom: none;
+    background: transparent;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+  }
+  .topbar::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 100vw;
+    transform: translateX(-50%);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--bg) 94%, transparent), color-mix(in srgb, var(--bg) 86%, transparent));
+    border-bottom: 1px solid var(--rule);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+  .imprint { display: flex; align-items: baseline; gap: 10px; }
+  .imprint .mark {
+    font-family: "Instrument Serif", serif;
+    font-style: italic;
+    font-size: 22px;
+    color: var(--pink);
+    letter-spacing: 0;
+    text-transform: none;
+    line-height: 1;
+  }
+  .imprint .name { color: var(--fg); letter-spacing: 0.18em; }
+  .topbar .meta { display: flex; gap: 22px; }
+  .topbar .meta span::before { content: "·"; margin-right: 22px; color: var(--rule-2); }
+  .topbar .meta span:first-child::before { content: ""; margin: 0; }
+
+  .color-mode-toggle {
+    margin-left: auto;
+    margin-right: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    background: var(--bg-2);
+    color: var(--fg-2);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    font-family: "Instrument Serif", serif;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  .color-mode-toggle:hover {
+    border-color: var(--pink);
+    color: var(--pink);
+    background: var(--bg-3);
+  }
+  .color-mode-toggle:focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 2px;
+  }
+  .color-mode-toggle .icon-sun,
+  .color-mode-toggle .icon-moon { display: none; }
+  [data-theme="light"] .color-mode-toggle .icon-moon { display: block; }
+  [data-theme="dark"] .color-mode-toggle .icon-sun { display: block; }
+  @media (max-width: 720px) {
+    .topbar { flex-wrap: wrap; gap: 12px; }
+    .color-mode-toggle { margin-left: 0; margin-right: 0; order: 3; }
+  }
+
+  /* Masthead */
+  .masthead {
+    position: relative;
+    padding: 76px 0 70px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  h1.title {
+    font-family: "Instrument Serif", serif;
+    font-weight: 400;
+    font-size: clamp(48px, 7.2vw, 104px);
+    line-height: 0.96;
+    letter-spacing: -0.022em;
+    margin: 0 0 28px;
+    max-width: 16ch;
+    color: var(--fg);
+  }
+  h1.title em { font-style: italic; color: var(--pink); }
+  .deck {
+    font-family: "Newsreader", serif;
+    font-style: italic;
+    font-weight: 300;
+    font-size: clamp(20px, 2.1vw, 26px);
+    line-height: 1.4;
+    color: var(--fg-2);
+    max-width: 56ch;
+    margin: 0 0 24px;
+  }
+  .abstract {
+    font-family: "Newsreader", serif;
+    font-size: clamp(16px, 1.5vw, 18px);
+    line-height: 1.55;
+    color: var(--fg-2);
+    max-width: 62ch;
+    margin: 0 0 36px;
+    padding-top: 20px;
+    border-top: 1px solid var(--rule);
+  }
+  .abstract .spine-label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--purple);
+    font-style: normal;
+    font-weight: 500;
+  }
+  h3.spine {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--purple);
+    margin: 2.2em 0 0.6em;
+  }
+  h3.spine:first-of-type { margin-top: 1.4em; }
+  .byline {
+    display: flex;
+    gap: 28px;
+    align-items: baseline;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+  }
+  .byline strong { color: var(--fg); font-weight: 500; }
+  .byline .author-link {
+    color: var(--fg);
+    text-decoration: none;
+    border-bottom: 1px solid var(--rule-2);
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .byline .author-link:hover { color: var(--pink); border-color: var(--pink); }
+  .byline .orcid-link {
+    color: #a6ce39;
+    text-decoration: none;
+    letter-spacing: 0.1em;
+    border-bottom: 1px dotted #a6ce39;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .byline .orcid-link:hover { color: var(--cyan); border-color: var(--cyan); }
+  footer.colophon .author-link,
+  footer.colophon .orcid-link {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px solid var(--rule-2);
+  }
+  footer.colophon .orcid-link { color: #a6ce39; border-color: #a6ce39; }
+  footer.colophon .author-link:hover,
+  footer.colophon .orcid-link:hover { color: var(--pink); border-color: var(--pink); }
+
+  /* Layout */
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 240px;
+    gap: 64px;
+    padding: 70px 0 120px;
+    align-items: start;
+  }
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: 1fr; gap: 48px; }
+    .sidebar { order: -1; position: static !important; }
+  }
+
+  article { min-width: 0; max-width: 720px; margin: 0 auto; }
+
+  .sidebar {
+    position: sticky;
+    top: 28px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    line-height: 1.6;
+    letter-spacing: 0.04em;
+  }
+  .toc-label {
+    color: var(--pink);
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .toc { list-style: none; padding: 0; margin: 0; }
+  .toc li { margin: 0; padding: 7px 0; border-bottom: 1px dotted var(--rule); }
+  .toc li:last-child { border-bottom: none; }
+  .toc a {
+    color: var(--fg-2);
+    text-decoration: none;
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    transition: color 0.2s;
+  }
+  .toc a:hover,
+  .toc a.is-active { color: var(--pink); }
+  .toc a.is-active .num { color: var(--pink); }
+  .toc a:focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+  .toc .num {
+    color: var(--purple);
+    flex-shrink: 0;
+    font-feature-settings: "tnum";
+  }
+
+  /* Article typography */
+  article h2 {
+    font-family: "Instrument Serif", serif;
+    font-weight: 400;
+    font-size: clamp(32px, 4vw, 44px);
+    line-height: 1.1;
+    letter-spacing: -0.012em;
+    margin: 92px 0 28px;
+    position: relative;
+    padding-top: 28px;
+    color: var(--fg);
+  }
+  article h2::before {
+    content: attr(data-num);
+    position: absolute;
+    top: 0;
+    left: 0;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: var(--pink);
+    font-weight: 500;
+  }
+  article h2:first-of-type { margin-top: 0; }
+
+  article h3 {
+    font-family: "Newsreader", serif;
+    font-weight: 600;
+    font-style: italic;
+    font-size: 24px;
+    line-height: 1.3;
+    margin: 52px 0 18px;
+    color: var(--cyan);
+    letter-spacing: -0.005em;
+  }
+  article h3::before {
+    content: "—";
+    color: var(--rule-2);
+    margin-right: 10px;
+    font-style: normal;
+  }
+
+  article p {
+    margin: 0 0 22px;
+    hyphens: auto;
+    -webkit-hyphens: auto;
+    color: var(--fg);
+  }
+  article p > em { font-style: italic; color: var(--cyan); }
+  article p > strong { font-weight: 600; color: var(--fg); }
+
+  /* Drop cap */
+  article > .lede::first-letter {
+    font-family: "Instrument Serif", serif;
+    font-size: 5.6em;
+    float: left;
+    line-height: 0.82;
+    padding: 6px 12px 0 0;
+    margin-top: 4px;
+    color: var(--pink);
+    font-weight: 400;
+    text-shadow: 0 0 30px var(--dropcap-glow);
+  }
+
+  /* Pull-quotes */
+  article blockquote {
+    margin: 32px 0;
+    padding: 6px 0 6px 24px;
+    border-left: 2px solid var(--pink);
+    font-family: "Instrument Serif", serif;
+    font-style: italic;
+    font-size: 26px;
+    line-height: 1.32;
+    color: var(--fg);
+    letter-spacing: -0.005em;
+  }
+  article blockquote.tight { font-size: 22px; padding-left: 20px; }
+
+  article a {
+    color: var(--cyan);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+  }
+
+  /* Code figures — terminal-style */
+  pre.figure {
+    margin: 30px 0;
+    padding: 44px 26px 22px;
+    background: var(--bg-2);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--purple);
+    border-radius: 4px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--fg-2);
+    overflow-x: auto;
+    box-shadow: var(--shadow);
+    position: relative;
+  }
+  pre.figure::before {
+    content: attr(data-label);
+    position: absolute;
+    top: 12px;
+    left: 18px;
+    background: var(--bg-2);
+    padding: 0 8px;
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--purple);
+  }
+  pre.figure.tree { border-left-color: var(--pink); }
+  pre.figure.tree::before { color: var(--pink); }
+
+  /* D3 visualization panels */
+  .viz-panel {
+    margin: 30px 0;
+    padding: 44px 16px 16px;
+    background: var(--bg-2);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--purple);
+    border-radius: 4px;
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+    min-height: 200px;
+    isolation: isolate;
+  }
+  .viz-panel[data-accent="pink"] { border-left-color: var(--pink); }
+  .viz-panel[data-accent="cyan"] { border-left-color: var(--cyan); }
+  .viz-panel[data-accent="green"] { border-left-color: var(--green); }
+  .viz-panel[data-accent="red"] { border-left-color: var(--red); }
+  .viz-panel::before {
+    content: attr(data-label);
+    position: absolute;
+    top: 12px;
+    left: 18px;
+    background: var(--bg-2);
+    padding: 0 8px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--purple);
+    z-index: 1;
+  }
+  .viz-panel[data-accent="pink"]::before { color: var(--pink); }
+  .viz-panel[data-accent="cyan"]::before { color: var(--cyan); }
+  .viz-panel[data-accent="green"]::before { color: var(--green); }
+  .viz-panel[data-accent="red"]::before { color: var(--red); }
+  .viz-panel svg {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    color: var(--fg);
+  }
+  .viz-panel text {
+    paint-order: stroke;
+    stroke: var(--bg-2);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+  }
+  .viz-panel [cursor="grab"]:active { cursor: grabbing; }
+  .viz-panel .viz-hint {
+    margin: 8px 0 0;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    text-align: center;
+  }
+  pre.figure.bad {
+    border-left-color: var(--red);
+    background: linear-gradient(180deg, var(--tint-red), var(--bg-2));
+  }
+  pre.figure.bad::before { color: var(--red); }
+  pre.figure.good {
+    border-left-color: var(--green);
+    background: linear-gradient(180deg, var(--tint-green), var(--bg-2));
+  }
+  pre.figure.good::before { color: var(--green); }
+
+  /* Terminal traffic-light dots */
+  pre.figure::after {
+    content: "";
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--rule-2);
+    box-shadow:
+      -14px 0 0 var(--rule-2),
+      -28px 0 0 var(--rule-2);
+    opacity: 0.5;
+  }
+
+  /* Constraint banner */
+  .constraint-card {
+    margin: 56px 0 32px;
+    padding: 28px 32px 26px;
+    background: linear-gradient(135deg, var(--tint-card), var(--tint-card-2));
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .constraint-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: linear-gradient(180deg, var(--pink), var(--purple));
+  }
+  .constraint-card .label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--pink);
+    margin-bottom: 10px;
+  }
+  .constraint-card .name {
+    font-family: "Instrument Serif", serif;
+    font-size: 38px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    margin-bottom: 14px;
+    color: var(--fg);
+  }
+  .constraint-card .sigil {
+    position: absolute;
+    top: 18px;
+    right: 24px;
+    font-family: "Instrument Serif", serif;
+    font-style: italic;
+    font-size: 80px;
+    line-height: 0.8;
+    color: var(--sigil-fade);
+    pointer-events: none;
+  }
+  .constraint-card .claim {
+    font-family: "Newsreader", serif;
+    font-style: italic;
+    font-size: 17px;
+    line-height: 1.45;
+    color: var(--fg-2);
+    max-width: 52ch;
+  }
+
+  /* Reading checkpoints & artifacts */
+  .artifacts-strip {
+    margin: 32px 0 40px;
+    padding: 20px 24px;
+    border: 1px dashed var(--rule);
+    border-radius: 4px;
+    background: var(--tint-card);
+  }
+  .artifacts-strip .strip-label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 12px;
+  }
+  .artifacts-strip .strip-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+  }
+  .artifacts-strip a {
+    color: var(--fg);
+    text-decoration: none;
+    border-bottom: 1px solid var(--purple);
+    padding-bottom: 1px;
+  }
+  .artifacts-strip a:hover { color: var(--pink); border-color: var(--pink); }
+  .breakpoint {
+    margin: 48px 0;
+    padding: 24px 28px 22px;
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--cyan);
+    border-radius: 4px;
+    background: var(--tint-card);
+    box-shadow: var(--shadow);
+  }
+  .breakpoint .bp-label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 8px;
+  }
+  .breakpoint .bp-title {
+    font-family: "Instrument Serif", serif;
+    font-size: 26px;
+    margin: 0 0 12px;
+    color: var(--fg);
+  }
+  .breakpoint .bp-recap {
+    margin: 0 0 14px;
+    padding-left: 1.2em;
+    font-size: 16px;
+    line-height: 1.55;
+    color: var(--fg-2);
+  }
+  .breakpoint .bp-recap li { margin-bottom: 6px; }
+  .breakpoint .bp-next {
+    font-family: "Newsreader", serif;
+    font-style: italic;
+    font-size: 16px;
+    color: var(--fg-2);
+    margin: 0 0 14px;
+  }
+  .breakpoint .bp-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+  }
+  .breakpoint .bp-actions a {
+    color: var(--purple);
+    text-decoration: none;
+    border: 1px solid var(--rule);
+    padding: 6px 10px;
+    border-radius: 3px;
+  }
+  .breakpoint .bp-actions a:hover {
+    border-color: var(--pink);
+    color: var(--pink);
+  }
+
+  /* Bridge */
+  .bridge {
+    margin: 40px 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    border: 1px solid var(--rule);
+    background: var(--bg-2);
+    border-radius: 4px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  @media (max-width: 720px) { .bridge { grid-template-columns: 1fr; } }
+  .bridge .col { padding: 22px 22px 24px; border-right: 1px solid var(--rule); }
+  .bridge .col:last-child { border-right: none; }
+  @media (max-width: 720px) {
+    .bridge .col { border-right: none; border-bottom: 1px solid var(--rule); }
+    .bridge .col:last-child { border-bottom: none; }
+  }
+  .bridge .col h4 {
+    font-family: "Instrument Serif", serif;
+    font-weight: 400;
+    font-style: italic;
+    font-size: 24px;
+    margin: 0 0 14px;
+    color: var(--pink);
+    line-height: 1.1;
+  }
+  .bridge .col:nth-child(2) h4 { color: var(--purple); }
+  .bridge .col:nth-child(3) h4 { color: var(--cyan); }
+  .bridge .col dl { margin: 0; font-family: "JetBrains Mono", monospace; font-size: 12px; line-height: 1.6; }
+  .bridge .col dt { color: var(--yellow); text-transform: uppercase; letter-spacing: 0.12em; font-size: 10px; margin-top: 10px; }
+  .bridge .col dt:first-child { margin-top: 0; }
+  .bridge .col dd { margin: 2px 0 0; color: var(--fg-2); }
+
+  /* Wide bridge (6 columns) */
+  .bridge.wide { grid-template-columns: repeat(6, 1fr); }
+  .bridge.wide .col { padding: 18px 14px 20px; }
+  .bridge.wide .col h4 { font-size: 20px; margin-bottom: 12px; }
+  .bridge.wide .col dl { font-size: 11px; line-height: 1.5; }
+  .bridge.wide .col dt { font-size: 9px; margin-top: 8px; letter-spacing: 0.1em; }
+  .bridge.wide .col:nth-child(4) h4 { color: var(--green); }
+  .bridge.wide .col:nth-child(5) h4 { color: var(--orange); }
+  .bridge.wide .col:nth-child(6) h4 { color: var(--pink); }
+  @media (max-width: 1100px) {
+    .bridge.wide { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 900px) {
+    .bridge.wide { grid-template-columns: 1fr; }
+    .bridge.wide .col { border-right: none; border-bottom: 1px solid var(--rule); padding: 22px 22px 24px; }
+    .bridge.wide .col:last-child { border-bottom: none; }
+    .bridge.wide .col h4 { font-size: 24px; }
+    .bridge.wide .col dl { font-size: 12px; line-height: 1.6; }
+    .bridge.wide .col dt { font-size: 10px; margin-top: 10px; letter-spacing: 0.12em; }
+  }
+
+  /* Equation rows */
+  .eqn-row { margin: 18px 0 30px; text-align: center; color: var(--fg); }
+  .eqn-row .katex { color: var(--fg); font-size: 1.15em; }
+  .eqn-row .katex-display { margin: 0; }
+  .eqn-row .caption {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    margin-top: 10px;
+  }
+  .katex { color: var(--fg); }
+
+  /* Code figures with syntax highlighting (Prism, Dracula-tuned) */
+  pre.code {
+    margin: 30px 0;
+    padding: 44px 26px 22px;
+    background: var(--bg-2);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--cyan);
+    border-radius: 4px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--fg);
+    overflow-x: auto;
+    box-shadow: var(--shadow);
+    position: relative;
+    tab-size: 2;
+  }
+  pre.code::before {
+    content: attr(data-label);
+    position: absolute;
+    top: 12px;
+    left: 18px;
+    background: var(--bg-2);
+    padding: 0 8px;
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--cyan);
+  }
+  pre.code::after {
+    content: attr(data-lang);
+    position: absolute;
+    top: 8px;
+    right: 14px;
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--fg-3);
+    opacity: 0.7;
+  }
+  pre.code code { font-family: inherit; font-size: inherit; color: inherit; background: none; padding: 0; }
+
+  /* Prism token colors — Dracula */
+  .token.comment, .token.prolog, .token.doctype, .token.cdata { color: var(--fg-3); font-style: italic; }
+  .token.punctuation { color: var(--fg-2); }
+  .token.namespace { opacity: 0.7; }
+  .token.symbol, .token.atom, .token.constant, .token.boolean, .token.number { color: var(--purple); }
+  .token.selector, .token.attr-name, .token.string, .token.char, .token.builtin, .token.url { color: var(--yellow); }
+  .token.operator, .token.entity { color: var(--pink); }
+  .token.variable { color: var(--fg); }
+  .token.atrule, .token.attr-value, .token.function, .token.class-name { color: var(--green); }
+  .token.keyword, .token.module { color: var(--pink); }
+  .token.regex, .token.important { color: var(--orange); }
+  .token.important, .token.bold { font-weight: 600; }
+  .token.italic { font-style: italic; }
+
+  /* Run trace block — for the demo output */
+  .run-trace {
+    margin: 30px 0;
+    padding: 42px 28px 24px;
+    background: linear-gradient(180deg, var(--tint-green), var(--bg-2));
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--green);
+    border-radius: 4px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12.5px;
+    line-height: 1.7;
+    box-shadow: var(--shadow);
+    position: relative;
+  }
+  .run-trace.denied {
+    background: linear-gradient(180deg, var(--tint-red), var(--bg-2));
+    border-left-color: var(--red);
+  }
+  .run-trace::before {
+    content: attr(data-label);
+    position: absolute;
+    top: 12px;
+    left: 18px;
+    background: var(--bg-2);
+    padding: 0 8px;
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--green);
+  }
+  .run-trace.denied::before { color: var(--red); }
+  .run-trace .step { display: block; padding: 2px 0; color: var(--fg-2); }
+  .run-trace .step .arrow { color: var(--fg-3); margin: 0 8px; }
+  .run-trace .step .key { color: var(--cyan); }
+  .run-trace .step .num { color: var(--purple); font-weight: 500; }
+  .run-trace .step .ok { color: var(--green); font-weight: 600; }
+  .run-trace .step .no { color: var(--red); font-weight: 600; }
+  .run-trace .verdict {
+    display: block;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--rule);
+    font-family: "Instrument Serif", serif;
+    font-style: italic;
+    font-size: 18px;
+    color: var(--fg);
+  }
+  .run-trace.denied .verdict .label { color: var(--red); }
+  .run-trace .verdict .label { color: var(--green); font-weight: 600; font-family: "JetBrains Mono", monospace; font-style: normal; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; }
+
+  /* Capstone */
+  .capstone {
+    margin: 70px 0 0;
+    padding: 50px 40px 42px;
+    background:
+      radial-gradient(circle at 20% 20%, var(--tint-cap-1), transparent 50%),
+      radial-gradient(circle at 80% 80%, var(--tint-cap-2), transparent 50%),
+      var(--bg-2);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .capstone::after {
+    content: "";
+    position: absolute;
+    inset: 6px;
+    border: 1px solid var(--tint-cap-bd);
+    border-radius: 4px;
+    pointer-events: none;
+  }
+  .capstone > * { position: relative; }
+  .capstone h2 { margin-top: 0; font-size: 38px; color: var(--fg); }
+  .capstone h2::before { color: var(--purple); }
+  .capstone p { color: var(--fg-2); }
+  .capstone blockquote {
+    color: var(--fg);
+    border-left-color: var(--purple);
+    background: linear-gradient(90deg, var(--tint-cap-bg), transparent);
+    padding: 8px 0 8px 24px;
+  }
+  .capstone pre.figure { background: var(--bg); border-color: var(--rule); }
+  .capstone pre.figure::before { background: var(--bg-2); }
+
+  /* Footer */
+  footer.colophon {
+    margin-top: 80px;
+    padding: 36px 0 60px;
+    border-top: 1px solid var(--rule);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: var(--fg-3);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  footer.colophon .end-sigil {
+    font-family: "Instrument Serif", serif;
+    font-style: italic;
+    color: var(--pink);
+    font-size: 18px;
+  }
+
+  /* Inline citations — small superscript pill */
+  sup.cite {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 9px;
+    font-weight: 500;
+    vertical-align: super;
+    line-height: 0;
+    margin: 0 1px 0 2px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: var(--tint-cite-bg);
+    color: var(--purple);
+    text-decoration: none;
+    border: 1px solid var(--tint-cite-bd);
+    transition: all 0.15s ease;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    position: relative;
+  }
+  sup.cite:hover {
+    background: var(--purple);
+    color: var(--bg);
+    border-color: var(--purple);
+  }
+  sup.cite + sup.cite { margin-left: 1px; }
+  /* Tooltip on hover — short form */
+  sup.cite[data-tip]:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-2);
+    border: 1px solid var(--rule-2);
+    border-radius: 3px;
+    padding: 6px 10px;
+    font-family: "Newsreader", serif;
+    font-size: 13px;
+    font-style: italic;
+    color: var(--fg);
+    white-space: nowrap;
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: normal;
+    text-transform: none;
+    line-height: 1.3;
+    z-index: 100;
+    box-shadow: var(--shadow);
+    pointer-events: none;
+    vertical-align: baseline;
+  }
+  sup.cite[data-tip]:hover::before {
+    content: "";
+    position: absolute;
+    bottom: calc(100% + 2px);
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: var(--rule-2);
+    z-index: 100;
+    pointer-events: none;
+  }
+
+  /* Bibliography expander */
+  .biblio {
+    margin: 90px 0 0;
+    border-top: 1px solid var(--rule);
+    padding-top: 36px;
+  }
+  .biblio > summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    padding: 14px 18px 14px 22px;
+    background: var(--bg-2);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--purple);
+    border-radius: 4px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--fg-2);
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .biblio > summary::-webkit-details-marker { display: none; }
+  .biblio > summary::marker { content: ""; }
+  .biblio > summary:hover {
+    background: var(--bg-3);
+    color: var(--fg);
+  }
+  .biblio > summary .triangle {
+    display: inline-block;
+    width: 0;
+    height: 0;
+    border-left: 6px solid var(--purple);
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+  .biblio[open] > summary .triangle { transform: rotate(90deg); }
+  .biblio > summary .label { color: var(--purple); flex-shrink: 0; }
+  .biblio > summary .count { margin-left: auto; color: var(--fg-3); font-size: 10px; letter-spacing: 0.14em; }
+  .biblio .biblio-body {
+    padding: 36px 8px 20px;
+    animation: fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+  .biblio h3.cat {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--pink);
+    margin: 36px 0 18px;
+    padding-bottom: 8px;
+    border-bottom: 1px dotted var(--rule);
+    font-style: normal;
+  }
+  .biblio h3.cat::before { content: ""; }
+  .biblio h3.cat:first-child { margin-top: 0; }
+  .biblio ol.refs {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    counter-reset: ref;
+  }
+  .biblio ol.refs li {
+    counter-increment: ref;
+    margin: 0;
+    padding: 12px 0 12px 48px;
+    position: relative;
+    font-family: "Newsreader", serif;
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: var(--fg-2);
+    border-bottom: 1px dotted var(--rule);
+  }
+  .biblio ol.refs li:last-child { border-bottom: none; }
+  .biblio ol.refs li::before {
+    content: counter(ref, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 12px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--purple);
+    letter-spacing: 0.08em;
+    width: 36px;
+  }
+  .biblio ol.refs li:target {
+    background: var(--tint-biblio);
+    border-left: 2px solid var(--purple);
+    padding-left: 46px;
+    margin-left: -8px;
+    padding-right: 8px;
+    border-radius: 2px;
+  }
+  .biblio ol.refs li .author { color: var(--fg); font-weight: 500; }
+  .biblio ol.refs li .title { font-style: italic; color: var(--cyan); }
+  .biblio ol.refs li .venue { color: var(--fg-3); }
+  .biblio ol.refs li a {
+    color: var(--cyan);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--cyan);
+  }
+  .biblio ol.refs li a:hover { color: var(--pink); border-color: var(--pink); }
+  .biblio .biblio-note {
+    margin-top: 28px;
+    padding: 14px 18px;
+    background: var(--tint-note);
+    border-left: 2px solid var(--purple);
+    font-family: "Newsreader", serif;
+    font-style: italic;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--fg-3);
+  }
+
+  /* Section dividers */
+  .divider {
+    text-align: center;
+    margin: 40px 0;
+    color: var(--purple);
+    font-family: "Instrument Serif", serif;
+    font-size: 20px;
+    letter-spacing: 1em;
+    padding-left: 1em;
+    opacity: 0.7;
+  }
+
+  /* Skip link */
+  .skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 12px;
+    z-index: 1000;
+    padding: 10px 16px;
+    background: var(--bg-2);
+    border: 1px solid var(--pink);
+    color: var(--pink);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-decoration: none;
+    border-radius: 3px;
+  }
+  .skip-link:focus {
+    left: 12px;
+    outline: 2px solid var(--cyan);
+    outline-offset: 2px;
+  }
+
+  /* Reading progress */
+  .reading-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 2px;
+    width: 0;
+    background: linear-gradient(90deg, var(--pink), var(--purple));
+    z-index: 999;
+    pointer-events: none;
+    transition: width 0.08s linear;
+  }
+
+  /* Entrance */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .masthead > * { animation: rise 0.9s ease both; }
+  .masthead > *:nth-child(1) { animation-delay: 0.05s; }
+  .masthead > *:nth-child(2) { animation-delay: 0.18s; }
+  .masthead > *:nth-child(3) { animation-delay: 0.30s; }
+
+  html.theme-transition,
+  html.theme-transition * {
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease !important;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .masthead > * { animation: none; }
+    .reading-progress { transition: none; }
+    html.theme-transition,
+    html.theme-transition * { transition: none !important; }
+  }
+
+  /* Dracula scrollbar */
+  ::-webkit-scrollbar { width: 12px; height: 12px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line);
+    border: 3px solid var(--bg);
+    border-radius: 6px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--rule-2); }
+</style>
+</head>
+<body>
+
+<a class="skip-link" href="#content">Skip to article</a>
+<div class="reading-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Reading progress"></div>
+
+<div class="page">
+
+  <header class="topbar">
+    <div class="imprint">
+      <span class="mark">Σ̄</span>
+      <span class="name">ShunyaBar Labs</span>
+    </div>
+    <button type="button" id="color-mode-toggle" class="color-mode-toggle" aria-label="Switch to dark mode">
+      <span class="icon-sun" aria-hidden="true">☀</span>
+      <span class="icon-moon" aria-hidden="true">☽</span>
+    </button>
+    <div class="meta">
+      <span>Essay № 02</span>
+      <span>Architecture</span>
+      <span>~3 hr read</span>
+    </div>
+  </header>
+
+  <section class="masthead">
+    <h1 class="title">Agents, Erlang, and the <em>Arithmetic&nbsp;of&nbsp;Invariants</em></h1>
+    <p class="deck">What primes, OTP, graph cycles, local repair, and information&#8209;flow lattices teach us about building agentic systems that survive scale.</p>
+    <p class="abstract"><span class="spine-label">The diagnosis.</span> Ning et al.&rsquo;s <em>Code as Agent Harness</em> survey is right: production agents fail because harnesses lack transactional shared program state and multi-tier permission models.<span class="spine-label"> The trap.</span> Like CODASYL navigational databases, the industry catalogs ever wilder self&#8209;mutating workflow DAGs when state semantics stay weak.<span class="spine-label"> The thesis.</span> Your DAG is a symptom. The needed move is Codd&rsquo;s move: govern the substrate with invariant&#8209;preserving algebra, not smarter graph traversal.</p>
+    <div class="byline">
+      <span><strong><a class="author-link" href="https://orcid.org/0009-0008-5446-2856" target="_blank" rel="noopener noreferrer">Sethu Iyer</a></strong> <a class="orcid-link" href="https://orcid.org/0009-0008-5446-2856" target="_blank" rel="noopener noreferrer" title="ORCID iD 0009-0008-5446-2856">ORCID</a></span>
+      <span>ShunyaBar Labs</span>
+    </div>
+  </section>
+
+  <div class="layout">
+
+    <article id="content">
+
+      <p class="lede">In the previous essay, I argued that primes are one of the rare structures that survive infinity without losing truth. They preserve identity. They decompose hierarchy. They avoid lattice regularity. They exhibit asymptotic control.</p>
+
+      <p>That was a mathematical argument. But the same question reappears in engineering under a different mask.</p>
+
+      <p>Not:</p>
+      <blockquote class="tight">What structure survives infinity?</blockquote>
+
+      <p>But:</p>
+      <blockquote class="tight">What architecture survives scale?</blockquote>
+
+      <h3 class="spine" id="diagnosis">The Diagnosis</h3>
+
+      <p>Ning et al. name the problem correctly.<sup class="cite" data-tip="Ning et al., Code as Agent Harness (2026)"><a href="#ref-45" style="color:inherit;text-decoration:none;">45</a></sup> Modern agents are not failing because the base model is too weak. They are failing because the <strong>agent harness</strong> &mdash; the code substrate around the model &mdash; lacks two primitives production systems already expect elsewhere: <em>transactional shared program state</em> and <em>multi-tier permissions</em>.</p>
+
+      <p>On state: when planners, coders, testers, and reviewers all read and write overlapping artifacts without declared read sets, write sets, and conflict policies, the harness&rsquo;s internal belief diverges from ground truth. Ning et al. call the missing abstraction transactional shared program state &mdash; synchronization of artifacts is not enough; assumptions must compose lawfully.<sup class="cite" data-tip="Ning et al., §5.2.4 Transactional Shared Program State"><a href="#ref-45" style="color:inherit;text-decoration:none;">45</a></sup></p>
+
+      <p>On permissions: tools are still invoked too blindly. Future harnesses need capability-based primitives, tiered action classes, and human-in-the-loop gates before high-risk side effects &mdash; not policy buried in prompts.<sup class="cite" data-tip="Ning et al., §5.2.5 Governance and Permissioned State Transitions"><a href="#ref-45" style="color:inherit;text-decoration:none;">45</a></sup> The fix is not &ldquo;be more careful.&rdquo; The fix is runtime enforcement: every merge checked, every tool call gated, every durable write governed.</p>
+
+      <h3 class="spine" id="trap">The Trap</h3>
+
+      <p>The industry heard &ldquo;multi-agent&rdquo; and reached for topology. In the survey&rsquo;s <em>Objective-driven and Adaptive Topologies</em> lane, systems mutate collaboration structure on the fly: dynamic DAGs, workflow rewriting, agent pool scaling, objective-driven replanning.<sup class="cite" data-tip="Ning et al., §4 Objective-driven and Adaptive Topologies"><a href="#ref-45" style="color:inherit;text-decoration:none;">45</a></sup> EvoMAC, SEW, and cousins add orchestration cleverness when shared state stays implicit.</p>
+
+      <p>Ning et al. state the structural point plainly: systems with explicit formal shared substrates use <em>simpler</em> topologies; systems without them develop <em>richer</em> adaptive topologies as a workaround.<sup class="cite" data-tip="Ning et al., §4 — topology complexity as symptom"><a href="#ref-45" style="color:inherit;text-decoration:none;">45</a></sup> That is the trap. When state is lawless, engineers compensate with self-mutating graphs. The DAG gets smarter. The substrate stays vague. Failures move from the model into the orchestration layer.</p>
+
+      <p>We have seen this movie before. In the 1960s, databases used navigational and hierarchical models (CODASYL and friends). To query data, developers wrote manual, step-by-step pathways through graphs of pointers. It was brittle. When the graph changed, the queries broke. Topology complexity was a symptom of <em>lawless data</em>.</p>
+
+      <h3 class="spine" id="thesis">The Thesis</h3>
+
+      <p><strong>Topology complexity is a symptom of lawless state.</strong> We do not need smarter DAGs. We need a harness whose merges, permissions, memory writes, retries, and repairs are governed by invariants the runtime can check &mdash; not vibes the model might remember.</p>
+
+      <p>That is what this essay supplies underneath harness engineering:</p>
+
+      <pre class="figure" data-label="Problem → invariant (not metaphor)">Transactional shared state     →  factored harness-state objects X := (i,s,c,q,τ,a)
+Multi-tier permissions         →  LCM label join + divisibility clearance
+Adaptive topology sprawl       →  OTP supervision + bounded workflow graphs
+Retry / delegation storms      →  Ihara cycles, spectral radius ρ(A)
+Partial failure                →  local repair (z' = z + kM), not global restart</pre>
+
+      <h3 class="spine" id="codasyl-era">The CODASYL Era of Agent Systems</h3>
+
+      <p>In 1970, Edgar F. Codd published <em>A Relational Model of Data for Large Shared Data Banks</em>.<sup class="cite" data-tip="Codd, A Relational Model of Data (1970)"><a href="#ref-46" style="color:inherit;text-decoration:none;">46</a></sup> He did not offer a better pointer system. He brought set theory and first-order logic and said, in effect: stop navigating DAGs. Data is a relation. Queries are algebraic operations on those relations. People hated it at first &mdash; too mathematical, surely too slow. Codd was right. Relational algebra gave us SQL, and it conquered the world, because <strong>invariant-preserving algebra scales; ad-hoc traversal graphs do not.</strong></p>
+
+      <p><em>Code as Agent Harness</em> is, in effect, a field guide to the CODASYL era of AI agents.<sup class="cite" data-tip="Ning et al., Code as Agent Harness (2026)"><a href="#ref-45" style="color:inherit;text-decoration:none;">45</a></sup> It looks at OpenHands, SWE-Agent, AutoGen, and dozens of kin and documents an industry-wide fascination with complex, self&#8209;mutating workflow DAGs &mdash; planner chains, reviewer loops, adaptive topology, runtime self&#8209;reorganization, synchronization layers, retry orchestration. The survey is right to catalog them. The mistake would be to treat that catalog as the destination.</p>
+
+      <blockquote>Modern agent frameworks are still in the navigational-database era.</blockquote>
+
+      <p>The parallel is structural, not poetic:</p>
+
+      <pre class="figure wide" data-label="Database era → agent era">Navigational DBs (CODASYL)     →  workflow-DAG agent harnesses
+Pointer traversal               →  planner / reviewer / executor chains
+Manual graph pathways           →  mutable orchestration topologies
+Topology-dependent logic        →  harness logic encoded in graph shape
+Application compensates         →  prompts + retries + memory patches
+Relational algebra (Codd)       →  invariant-preserving harness algebra
+SQL + declarative queries       →  lawful composition (LCM, divisibility, repair)
+ACID / transactional semantics  →  transactional harness-state + capability tiers</pre>
+
+      <p>Codd&rsquo;s move was <em>not</em> &ldquo;better graph traversal.&rdquo; It was: move invariants into the substrate, make operations lawful, make composition declarative, let topology become secondary. The same category of move is needed for agents. Codd did not improve pointer chasing; he replaced it.</p>
+
+      <blockquote>Your DAG is a symptom. Stop mutating the graph. Start governing the state.</blockquote>
+
+      <p>Harness state is not a chat log. It is an invariant-bearing object composed under explicit laws &mdash; joins that are LCMs, clearances that are divisibility tests, failures that are local repairs, cycles that are spectral facts on the graph you actually run. Topology should be <em>derived</em> from state laws, not hand-wired as the primary program.</p>
+
+      <p>Primes encode sensitivity. Erlang factorizes execution. Denning composes information flow. Ihara names closed loops on the runtime graph. The survey maps today&rsquo;s navigational harnesses; this essay is the relational-algebra bet underneath them.</p>
+
+      <aside class="breakpoint" id="bp-spine" aria-label="Reading checkpoint">
+        <div class="bp-label">Checkpoint &middot; Spine</div>
+        <p class="bp-title">Pause here if the opening felt dense</p>
+        <ul class="bp-recap">
+          <li><strong>Diagnosis:</strong> harnesses lack transactional state + tiered permissions (Ning).</li>
+          <li><strong>Trap:</strong> industry adds mutating DAGs when state is implicit (CODASYL pattern).</li>
+          <li><strong>Thesis:</strong> govern state with algebra; topology is derived, not primary.</li>
+        </ul>
+        <p class="bp-next">Next: identity and factorization (§02&ndash;03), then resonance and repair.</p>
+        <div class="bp-actions">
+          <a href="#codasyl-era">Re-read CODASYL era</a>
+          <a href="#identity">Continue to §02</a>
+          <a href="artifacts/lattice_lab.py">Run lattice lab</a>
+        </div>
+      </aside>
+
+      <p>That failure mode is not hypothetical. It is the demo-to-production cliff.</p>
+
+      <p>They work beautifully in the demo. One agent. One prompt. One tool call. One happy path.</p>
+
+      <p>Then production arrives. Now there are 70 agents. Each has memory. Each calls tools. Each needs permissions. Each can fail halfway through a task. Each can hallucinate. Each can retry. Each can mutate the world.</p>
+
+      <p>Suddenly the problem is no longer &ldquo;how smart is the model?&rdquo;</p>
+
+      <p>The problem is:</p>
+
+      <blockquote>How do you compose unreliable, stateful, effectful workers without losing control?</blockquote>
+
+      <p>This is not a new problem. Telecom systems solved a version of it decades ago. The language was Erlang. The architecture was OTP. And the idea was brutally simple:</p>
+
+      <blockquote class="tight">Build the system from small isolated processes. Let them communicate by messages. Supervise them. Expect them to fail.</blockquote>
+
+      <p>In other words:</p>
+
+      <blockquote>Erlang is prime factorization for computation.</blockquote>
+
+      <div class="constraint-card">
+        <div class="sigil">&rarr;</div>
+        <div class="label">Reader Map</div>
+        <div class="name">This Essay Is Dense on Purpose</div>
+        <div class="claim">identity &rarr; composition &rarr; cycles &rarr; resonance &rarr; failure containment &rarr; local repair &rarr; capabilities &rarr; memory &rarr; retrieval &rarr; information flow &rarr; harness invariants &rarr; factored object algebra &rarr; executable harness</div>
+      </div>
+
+      <p>This is a long, layered essay. It is not meant to be skimmed like a product announcement. If a section feels heavy, the fastest companion shelves are Codd for the substrate-shift precedent<sup class="cite" data-tip="Codd, A Relational Model of Data (1970)"><a href="#ref-46" style="color:inherit;text-decoration:none;">46</a></sup>, Ning et al. on code as agent harness<sup class="cite" data-tip="Ning et al., Code as Agent Harness (2026)"><a href="#ref-45" style="color:inherit;text-decoration:none;">45</a></sup>, Armstrong for Erlang/OTP<sup class="cite" data-tip="Armstrong, Programming Erlang (2013)"><a href="#ref-1" style="color:inherit;text-decoration:none;">1</a></sup>, Kleppmann for distributed systems<sup class="cite" data-tip="Kleppmann, Designing Data-Intensive Applications (2017)"><a href="#ref-33" style="color:inherit;text-decoration:none;">33</a></sup>, Denning for information flow<sup class="cite" data-tip="Denning, A Lattice Model of Secure Information Flow (1976)"><a href="#ref-17" style="color:inherit;text-decoration:none;">17</a></sup>, Diffie and Hellman for key agreement<sup class="cite" data-tip="Diffie &amp; Hellman, New Directions in Cryptography (1976)"><a href="#ref-25" style="color:inherit;text-decoration:none;">25</a></sup>, and Terras for graph zeta<sup class="cite" data-tip="Terras, Zeta Functions of Graphs (2010)"><a href="#ref-41" style="color:inherit;text-decoration:none;">41</a></sup>. You do not need to master them first; they are the shelves this essay is pulling from.</p>
+
+      <p>The essay moves in that order. First we need identity, so the system can name what exists. Then hierarchy, so it can compose named units. Then non&#8209;lattice structure, so those units do not all fail in sync. Then stability, capabilities, memory, retrieval, and information flow. The math is not decoration; it is a vocabulary for invariants that production systems already need.</p>
+
+      <div class="artifacts-strip" id="artifacts">
+        <div class="strip-label">Runnable artifacts</div>
+        <div class="strip-links">
+          <a href="artifacts/factor_agent/README.md">FactorAgent (Elixir / OTP)</a>
+          <a href="artifacts/lattice_lab.py">Lattice lab (LCM / clearance)</a>
+          <a href="artifacts/harness_compose.py">Harness compose (X &otimes; Y)</a>
+          <a href="artifacts/README.md">All artifacts</a>
+        </div>
+      </div>
+
+      <h2 id="mistake" data-num="§ 01 / Diagnosis">The Agentic Mistake</h2>
+
+      <p>By &ldquo;agent&rdquo; I do not mean only a chat transcript with a loop around it. I mean a production worker that can read state, write state, call tools, retry, remember, and affect other people. Once an agent can do those things, it belongs to distributed systems engineering whether or not the interface looks like a prompt.</p>
+
+      <p>Most agent systems begin as a blob. A large model is given a task. It reasons. It calls tools. It remembers things. It decides what to do next.</p>
+
+      <p>At small scale, this feels magical. At production scale, it becomes terrifying. Because the agent is doing too many things at once:</p>
+
+      <pre class="figure" data-label="Overloaded agent">planning
+reasoning
+retrieval
+memory
+tool selection
+permission interpretation
+side-effect execution
+error handling
+self-correction</pre>
+
+      <div id="viz-blob" class="viz-panel" data-label="Overloaded agent topology" data-accent="red" data-height="300"></div>
+      <p class="viz-hint">Each concern pulls on one god-object</p>
+
+      <p>The failure is not that the model is stupid. The failure is that the runtime boundary is doing no work. If planning, permissions, memory, execution, and recovery are all hidden inside one opaque loop, then the system has no stable place to enforce policy or explain behavior.</p>
+
+      <p>This is not intelligence. This is architectural overloading.</p>
+
+      <p>A production agent should not be a god-object with API access. It should be one process inside a governed distributed system. The LLM can reason. But the system must decide:</p>
+
+      <pre class="figure" data-label="What the system owns">what the agent is allowed to see
+what tools it can call
+what memory it can write
+what actions require approval
+what failures are retryable
+what must be audited
+what must never happen</pre>
+
+      <p>The model is not the architecture.</p>
+
+      <blockquote>The architecture is the thing that remains when the model is wrong.</blockquote>
+
+      <p>The harness is not the model. The harness is the algebra the runtime must enforce.</p>
+
+      <div class="divider">§ &nbsp; § &nbsp; §</div>
+
+      <div class="constraint-card">
+        <div class="sigil">i</div>
+        <div class="label">Constraint 01</div>
+        <div class="name">Identity</div>
+        <div class="claim">No two distinct things should collapse into the same representation. Every actor, message, and effect is addressable.</div>
+      </div>
+
+      <p>Once architecture owns the invariants, the first invariant is simple: things that are different must remain distinguishable. Everything else in the essay depends on that. You cannot supervise, audit, authorize, repair, or route what you cannot name.</p>
+
+      <h2 id="identity" data-num="§ 02 / Identity">In Arithmetic, Then in Erlang</h2>
+
+      <p>In number theory, primes preserve identity through unique factorization. Every integer decomposes into primes in exactly one way:</p>
+
+      <div class="eqn-row">
+        $$ 360 \;=\; 2^{3} \cdot 3^{2} \cdot 5 $$
+        <div class="caption">Unique factorization &mdash; identity at infinite scale</div>
+      </div>
+
+      <div id="viz-prime-factor" class="viz-panel" data-label="Factorization tree · 360" data-accent="purple" data-height="260"></div>
+
+      <p>That is not a heuristic. That is not a probability. That is identity at infinite scale.</p>
+
+      <p>Uniqueness matters because debugging is reverse composition. When something goes wrong, you need to recover the path from effect back to cause. If two causes collapse into the same representation, every later explanation becomes guesswork.</p>
+
+      <p>Agentic systems need the same property. Every component must have a stable identity:</p>
+
+      <pre class="figure" data-label="Addressable units">user_id
+tenant_id
+request_id
+workflow_id
+agent_id
+tool_call_id
+memory_id
+approval_id
+audit_event_id</pre>
+
+      <p>Without identity, the system cannot answer basic questions:</p>
+
+      <pre class="figure" data-label="Questions without identity">Which agent made this decision?
+Which user authorized this action?
+Which document was retrieved?
+Which tool call created this Jira ticket?
+Which memory influenced this response?
+Which approval allowed this Slack message to be sent?</pre>
+
+      <p>If you cannot answer those questions, you do not have a production agentic system. You have a very confident ghost.</p>
+
+      <p>Erlang understood this at the process level<sup class="cite" data-tip="Armstrong, Making Reliable Distributed Systems (2003)"><a href="#ref-2" style="color:inherit;text-decoration:none;">2</a></sup><sup class="cite" data-tip="OTP Design Principles, Ericsson"><a href="#ref-3" style="color:inherit;text-decoration:none;">3</a></sup>. An Erlang process has an identity. It owns its state. It receives messages. It can be monitored. It can crash. It can be restarted. It is not an invisible thread inside a shared heap of chaos. It is a unit.</p>
+
+      <p>That is the first lesson agents should steal from Erlang:</p>
+
+      <blockquote>An agent must be an addressable process, not a vague behavior inside a prompt.</blockquote>
+
+      <p>A good agentic architecture should look less like this:</p>
+
+      <pre class="figure bad tree" data-label="Anti-pattern">Big Agent
+ &#9500;&#9472;&#9472; memory
+ &#9500;&#9472;&#9472; tools
+ &#9500;&#9472;&#9472; reasoning
+ &#9492;&#9472;&#9472; vibes</pre>
+
+      <p>And more like this:</p>
+
+      <pre class="figure good tree" data-label="Addressable decomposition">Workflow Supervisor
+ &#9500;&#9472;&#9472; Orchestrator Process
+ &#9500;&#9472;&#9472; Docs Agent Process
+ &#9500;&#9472;&#9472; CRM Agent Process
+ &#9500;&#9472;&#9472; Memory Service
+ &#9500;&#9472;&#9472; Tool Executor
+ &#9492;&#9472;&#9472; Audit Logger</pre>
+
+      <div id="viz-process-tree" class="viz-panel" data-label="Addressable decomposition" data-accent="green" data-height="320"></div>
+      <p class="viz-hint">Horizontal supervision sketch</p>
+
+      <p>Each process has identity. Each message has identity. Each side effect has identity. This is the computational equivalent of saying: <em>no two distinct things should collapse into the same representation</em>. That is identity.</p>
+
+      <div class="constraint-card">
+        <div class="sigil">&prod;</div>
+        <div class="label">Constraint 02</div>
+        <div class="name">Hierarchy</div>
+        <div class="claim">Global behavior emerges from the composition of local irreducibles &mdash; supervised, typed, and inspectable.</div>
+      </div>
+
+      <h2 id="hierarchy" data-num="§ 03 / Hierarchy">Composition of Local Irreducibles</h2>
+
+      <p>Primes are not just isolated objects. They compose. The entire multiplicative structure of the integers emerges from them. Local irreducible units generate global arithmetic. This is the Euler product idea in architectural form:</p>
+
+      <div class="eqn-row">
+        $$ \zeta(s) \;=\; \prod_{p \text{ prime}} \frac{1}{1 - p^{-s}} $$
+        <div class="caption">Global structure as a product over local irreducibles</div>
+      </div>
+
+      <p>If integers compose by multiplication, systems compose as graphs. Requests move from process to process. Messages traverse edges. Retries form loops. Supervision trees branch. The same question returns in a new shape: what are the irreducible units of the topology?</p>
+
+      <p>There is a graph-theoretic echo of the same idea. On a finite directed graph $G$, closed walks compose. Some loops are powers of shorter ones; the irreducible ones are <em>prime cycles</em>. The Ihara zeta function<sup class="cite" data-tip="Ihara, On the Zeta-Functions of a Finite Graph (1966)"><a href="#ref-39" style="color:inherit;text-decoration:none;">39</a></sup> packages every closed-walk count into an Euler product over those prime cycles:</p>
+
+      <div class="eqn-row">
+        $$ \zeta_G(u) \;=\; \prod_{[C]} \frac{1}{1 - u^{\ell(C)}} $$
+        <div class="caption">Ihara zeta &mdash; one factor per primitive closed cycle $C$ of length $\ell(C)$</div>
+      </div>
+
+      <p>Hashimoto and Bass showed this is not mere poetry: $\zeta_G^{-1}$ is a polynomial built from the adjacency matrix.<sup class="cite" data-tip="Bass, Ihara's Zeta Function and a Tower of Intermediate Jacobians (1992)"><a href="#ref-40" style="color:inherit;text-decoration:none;">40</a></sup> Topology becomes spectrum. A supervision tree, a workflow DAG, a tool-call graph &mdash; each is a $G$. The platform is not only factorized into processes; it has a <em>cycle structure</em>, and Ihara zeta is how you name it.</p>
+
+      <div class="eqn-row">
+        $$ \zeta_G(u)^{-1} \;=\; \det(I - uA) $$
+        <div class="caption">Determinant form (adjacency $A$) &mdash; global zeta from local edge data</div>
+      </div>
+
+      <p>In that discrete setting, congruence invariance plays the role that monodromy invariance plays in topology: after transport around a cycle, the object must return with its governing identity intact. For an agent runtime, that means a message, label, permission, idempotency key, or audit identity should survive a workflow loop without mutation or ambiguity.</p>
+
+      <p>A retry loop is the plainest example. The second attempt may run later, on a different worker, after a transient failure. But it must return carrying the same request identity, the same permission context, and the same idempotency key. Otherwise the loop is not recovery; it is a new side effect wearing the old task&rsquo;s clothes.</p>
+
+      <div id="viz-ihara-graph" class="viz-panel" data-label="Call graph · prime cycle" data-accent="pink" data-height="340"></div>
+      <p class="viz-hint">Pink edges = synchronized retry loop</p>
+      <div id="viz-euler-primes" class="viz-panel" data-label="Euler product factors" data-accent="purple" data-height="220"></div>
+
+      <p>Agentic systems need the same decomposition. A complex request should not be executed as one giant prompt loop.</p>
+
+      <p>Take a request like:</p>
+      <blockquote class="tight">&ldquo;Summarize the latest QBR deck, compare it with Salesforce numbers, identify churn risks, and draft a Slack update.&rdquo;</blockquote>
+
+      <p>A weak agent architecture treats this as a single blob of reasoning. A stronger architecture decomposes it into a workflow:</p>
+
+      <pre class="figure tree" data-label="Workflow DAG">Retrieve QBR Deck
+        &#8595;
+Summarize Deck
+        &#8595;
+Query Salesforce
+        &#8595;
+Compare Metrics
+        &#8595;
+Identify Risks
+        &#8595;
+Draft Slack Update
+        &#8595;
+Human Approval
+        &#8595;
+Send Slack Message</pre>
+
+      <div id="viz-workflow-dag" class="viz-panel" data-label="Workflow DAG" data-accent="purple" data-height="420"></div>
+
+      <p>This is a hierarchy. Not a vague hierarchy. A typed one. Each node has:</p>
+
+      <pre class="figure" data-label="Per-node contract">input schema
+output schema
+permissions
+timeout
+retry policy
+idempotency key
+audit event
+failure behavior</pre>
+
+      <p>In Erlang/OTP, this shows up as supervision trees. A supervisor owns child processes. Child processes perform narrow tasks. If a child crashes, the supervisor applies a restart strategy. This is not just a runtime feature. It is an ontology.</p>
+
+      <p>OTP says:</p>
+
+      <blockquote>A system should know how it is decomposed.</blockquote>
+
+      <p>That is exactly what most agent frameworks lack. They know the prompt. They do not know the factorization. The stronger design is:</p>
+
+      <pre class="figure tree" data-label="Supervision tree">Agent Platform Supervisor
+ &#9500;&#9472;&#9472; Gateway Supervisor
+ &#9500;&#9472;&#9472; Shared Services Supervisor
+ &#9474;    &#9500;&#9472;&#9472; Policy Engine
+ &#9474;    &#9500;&#9472;&#9472; Tool Registry
+ &#9474;    &#9500;&#9472;&#9472; Memory Service
+ &#9474;    &#9492;&#9472;&#9472; Audit Logger
+ &#9474;
+ &#9500;&#9472;&#9472; Workflow Dynamic Supervisor
+ &#9474;    &#9492;&#9472;&#9472; Workflow Supervisor
+ &#9474;         &#9500;&#9472;&#9472; Orchestrator
+ &#9474;         &#9500;&#9472;&#9472; Docs Agent
+ &#9474;         &#9500;&#9472;&#9472; CRM Agent
+ &#9474;         &#9500;&#9472;&#9472; Data Agent
+ &#9474;         &#9492;&#9472;&#9472; Slack Agent
+ &#9474;
+ &#9492;&#9472;&#9472; Background Jobs Supervisor
+      &#9500;&#9472;&#9472; Evaluation Worker
+      &#9500;&#9472;&#9472; Memory Compactor
+      &#9492;&#9472;&#9472; Embedding Refresher</pre>
+
+      <div id="viz-supervision" class="viz-panel" data-label="OTP supervision tree" data-accent="cyan" data-height="380"></div>
+      <p class="viz-hint">Click nodes to collapse branches</p>
+
+      <p>This is agentic factorization. Each unit can fail locally. Each unit can be replaced. Each unit can be inspected. Each unit can be supervised. That is hierarchy.</p>
+
+      <div class="constraint-card">
+        <div class="sigil">&#8709;</div>
+        <div class="label">Constraint 03</div>
+        <div class="name">Non&#8209;Lattice Structure</div>
+        <div class="claim">Avoid building a perfectly regular machine that fails perfectly regularly. Deterministic aperiodicity over rigid grids.</div>
+      </div>
+
+      <p>Decomposition alone is not enough. You can split a blob into clean parts and still arrange those parts so they all wake up, retry, compact memory, or hit the same endpoint at the same time. A factored system can still resonate.</p>
+
+      <aside class="breakpoint" id="bp-03" aria-label="Reading checkpoint">
+        <div class="bp-label">Checkpoint &middot; §03</div>
+        <p class="bp-title">You just crossed Ihara + OTP</p>
+        <ul class="bp-recap">
+          <li>Processes are irreducible units; supervision contains failure.</li>
+          <li>Workflow graphs have <em>prime cycles</em>; closed walks compose.</li>
+          <li>Hierarchy without cycle awareness still resonates.</li>
+        </ul>
+        <p class="bp-next">Next: why regular schedules synchronize failure (§04).</p>
+        <div class="bp-actions">
+          <a href="#hierarchy">Back to §03</a>
+          <a href="#lattice">Continue to §04</a>
+        </div>
+      </aside>
+
+      <h2 id="lattice" data-num="§ 04 / Resonance">Where Resonance Hides</h2>
+
+      <p>This is the spectral shadow of <a href="#trap">the trap</a>. When harness state stays implicit, teams add adaptive topologies &mdash; mutating DAGs, dynamic delegation, self-reconfiguring agent pools &mdash; to paper over missing invariants.<sup class="cite" data-tip="Ning et al., §4 Objective-driven and Adaptive Topologies"><a href="#ref-45" style="color:inherit;text-decoration:none;">45</a></sup> Those graphs can look sophisticated while amplifying the same closed loops: synchronized retries, shared evaluators, memory refresh cycles, and queue resonance. Topology complexity without lawful state is harness resonance wearing a planner costume.</p>
+
+      <p>The third constraint from the prime essay was non-lattice structure. Lattices are comfortable. They are regular. They are indexable. They repeat. They are also where resonance hides.</p>
+
+      <p>In distributed systems, lattice thinking appears everywhere:</p>
+
+      <pre class="figure" data-label="Hidden lattices">run every job every 5 minutes
+shard by user_id % N
+retry every 30 seconds
+batch all tenants at midnight
+assign workers in round-robin order
+evaluate every model on the same fixed slice</pre>
+
+      <p>Regularity is convenient until it synchronizes failure. Then you get:</p>
+
+      <pre class="figure bad" data-label="Synchronized failure">retry storms
+thundering herds
+hot shards
+cache stampedes
+coordinated job spikes
+periodic latency cliffs</pre>
+
+      <p>Imagine a tool endpoint returns <code style="color:var(--purple)">503</code> for ninety seconds. Every agent retries every thirty seconds. The first wave lands at <code style="color:var(--purple)">t+30</code>, the second at <code style="color:var(--purple)">t+60</code>, the third at <code style="color:var(--purple)">t+90</code>, exactly when the service is trying to recover. No agent was malicious. No model made a bad semantic choice. The outage was manufactured by regularity.</p>
+
+      <p>This is the systems version of lattice resonance. Agentic systems make this worse because agents multiply side effects. One retry is fine. Ten thousand agents retrying the same failed tool endpoint every 30 seconds is an outage wearing a trench coat.</p>
+
+      <p>So production agents need structured irregularity. Not randomness &mdash; randomness is hard to debug. But <em>deterministic aperiodicity</em> is useful. This is where the spirit of Penrose tilings enters the engineering picture. A Penrose tiling covers the plane without repeating periodically. It has local rules, but no global grid repetition.</p>
+
+      <p>That is exactly the kind of pattern we want for scheduling and placement:</p>
+
+      <pre class="figure good" data-label="Properties of aperiodic schedules">deterministic locally
+non-repeating globally
+debuggable
+resistant to synchronization</pre>
+
+      <p>For example, background jobs should not all run on a fixed lattice:</p>
+
+      <pre class="figure bad" data-label="Lattice schedule (don't)">00:00 memory compaction
+00:00 embedding refresh
+00:00 eval batch
+00:00 cache warmup</pre>
+
+      <p>That is how systems punch themselves in the face. A better architecture uses deterministic aperiodic offsets:</p>
+
+      <pre class="figure good" data-label="Aperiodic offsets">tenant_1 memory compaction &rarr; 03:17
+tenant_2 memory compaction &rarr; 11:42
+tenant_3 memory compaction &rarr; 26:05
+tenant_4 memory compaction &rarr; 44:31</pre>
+
+      <p>The goal is not literal Penrose geometry. The goal is:</p>
+
+      <blockquote>Avoid building a perfectly regular machine that fails perfectly regularly.</blockquote>
+
+      <p>Erlang contributes here too. Because Erlang systems are not built around one synchronized global control loop. They are built from independent processes with mailboxes. Each process reacts to messages. Each process can be scheduled independently. Each process can fail independently. The topology is not a rigid grid. It is a living supervised network. That is non-lattice architecture.</p>
+
+      <p>But a network still has loops. A fixed retry interval is a clock; on the call graph it is a <em>closed walk</em> of fixed length, repeated forever. Ten thousand agents sharing that interval are not ten thousand independent failures &mdash; they are one prime cycle, amplified. Ihara zeta is the bookkeeping for those cycles: which loops are primitive, which are powers, how they multiply into global walk counts.<sup class="cite" data-tip="Terras, Zeta Functions of Graphs: A Stroll Through the Garden (2010)"><a href="#ref-41" style="color:inherit;text-decoration:none;">41</a></sup> The engineering question is spectral: does perturbation die out or resonate?</p>
+
+      <div class="eqn-row">
+        $$ \rho(A) \;=\; \max_i |\lambda_i| \qquad\text{(spectral radius of the interaction graph)}$$
+        <div class="caption">When $\rho(A)$ is large, small periodic disturbances amplify; when the gap is healthy, they dissipate</div>
+      </div>
+
+      <p>Read $\rho(A)$ informally as an echo test. If a small disturbance keeps finding high&#8209;gain loops, it comes back louder. If the topology spreads and damps the disturbance, the same failure becomes boring telemetry instead of a platform event.</p>
+
+      <p>That is why aperiodic offsets matter. They break exact repetition of the same closed walk. They do not remove cycles from the graph &mdash; nothing does &mdash; but they prevent the platform from tuning every process to the same resonant frequency. Non-lattice scheduling is the operational cousin of asking for a graph whose Ihara zeta does not concentrate pathology in a few dominant modes.</p>
+
+      <div id="viz-schedule" class="viz-panel" data-label="Lattice vs aperiodic schedules" data-accent="green" data-height="280"></div>
+      <div id="viz-spectral" class="viz-panel" data-label="Interaction graph spectrum" data-accent="cyan" data-height="240"></div>
+      <p class="viz-hint">ρ(A) &gt; 1 amplifies periodic failure</p>
+
+      <div class="constraint-card">
+        <div class="sigil">&infin;</div>
+        <div class="label">Constraint 04</div>
+        <div class="name">Asymptotic Stability</div>
+        <div class="claim">Failure does not scale into confusion. The system becomes more predictable as it grows, not less.</div>
+      </div>
+
+      <aside class="breakpoint" id="bp-04" aria-label="Reading checkpoint">
+        <div class="bp-label">Checkpoint &middot; §04</div>
+        <p class="bp-title">Resonance = topology without lawful state</p>
+        <ul class="bp-recap">
+          <li>Fixed retries are closed walks; shared intervals amplify outages.</li>
+          <li>Adaptive DAGs are the harness trap in graph form.</li>
+          <li>Watch ρ(A): does disturbance die out or echo?</li>
+        </ul>
+        <p class="bp-next">Next: let it crash, local repair, bounded blast radius (§05).</p>
+        <div class="bp-actions"><a href="#trap">The trap</a><a href="#asymptotic">Continue to §05</a></div>
+      </aside>
+
+      <h2 id="asymptotic" data-num="§ 05 / Stability">Failure Without Confusion</h2>
+
+      <p>The final constraint is the hardest. A system survives scale only if its error does not grow faster than its control mechanism. Informally:</p>
+
+      <div class="eqn-row">
+        $$ \limsup_{n \to \infty} \; \frac{\mathcal{E}(n)}{\mathcal{C}(n)} \;\leq\; 1 $$
+        <div class="caption">Error growth dominated by control growth</div>
+      </div>
+
+      <p>Most agent systems fail this immediately.</p>
+
+      <p>At small scale: one agent, one memory store, one tool, one user. Everything is understandable.</p>
+
+      <p>At larger scale: hundreds of agents, thousands of tools, millions of memories, billions of retrieved chunks, unbounded workflows, cross-tenant permissions, human approvals, partial failures. Now correctness becomes expensive.</p>
+
+      <p>If every new agent increases governance complexity linearly, the platform will eventually collapse under its own coordination cost. Asymptotic stability means the system becomes more predictable as it grows, not less.</p>
+
+      <p>Erlang&rsquo;s answer is supervision. Do not prevent every failure. Contain failure. A process crashes. Its supervisor notices. The restart policy applies. The system continues. This is the famous Erlang idea:</p>
+
+      <blockquote>Let it crash.<sup class="cite" data-tip="Armstrong, Programming Erlang (2013)"><a href="#ref-1" style="color:inherit;text-decoration:none;">1</a></sup></blockquote>
+
+      <p>But that phrase is often misunderstood. It does not mean &ldquo;be careless.&rdquo; It means:</p>
+
+      <blockquote class="tight">Design the system so failure is local, observable, and recoverable.</blockquote>
+
+      <p>That is exactly what agentic systems need. A CRM agent fails because Salesforce times out.</p>
+
+      <p>Bad architecture:</p>
+
+      <pre class="figure bad" data-label="Confused failure">The whole agent loop crashes.
+The user gets a vague error.
+The system loses intermediate state.
+A retry may duplicate side effects.</pre>
+
+      <p>Good architecture:</p>
+
+      <pre class="figure good" data-label="Contained failure">CRM node fails.
+Retry policy applies.
+Independent DAG nodes continue.
+Workflow checkpoint is preserved.
+Duplicate writes are prevented by idempotency keys.
+Audit log records the failure.
+User receives partial progress.</pre>
+
+      <p>There is one more requirement: repair should be local. A failed node should not force the platform to recompute the whole workflow, rewrite every memory, or reshuffle every already&#8209;valid assignment. In the companion lock&#8209;preserving repair experiments<sup class="cite" data-tip="Iyer, Geometry of Conditional Logic (2026)"><a href="#ref-42" style="color:inherit;text-decoration:none;">42</a></sup>, the arithmetic form is deliberately simple:</p>
+
+      <div class="eqn-row">
+        $$ z' \;=\; z + kM $$
+        <div class="caption">Repair jump: move to a new state while preserving locked commitments encoded in $M$</div>
+      </div>
+
+      <p>Here $M$ is the product of commitments that must not change. Choosing $k$ correctly lets the system alter one disturbed residue while every locked residue remains congruent to its previous value. Engineering translation: the repair radius is the blast radius. A good agent runtime should be able to say not only <em>what failed</em>, but <em>which commitments were preserved</em>, <em>which ones moved</em>, and <em>how far the repair propagated</em>.</p>
+
+      <p>In the CRM example, the failed Salesforce call should not invalidate the documents already retrieved, the human approval already granted, or the draft already checkpointed. The repair should touch the CRM node and the dependent comparison step, not the entire workflow. That is what local repair buys: continuity without pretending nothing happened.</p>
+
+      <p>That is asymptotic stability. Not &ldquo;nothing fails.&rdquo; Something much better:</p>
+
+      <blockquote>Failure does not scale into confusion.</blockquote>
+
+      <p>This is where production agent systems need OTP more than they need another prompt template.</p>
+
+      <div class="divider">§ &nbsp; § &nbsp; §</div>
+
+      <p>If failure needs local boundaries, side effects need them even more. A read error can be retried. A duplicated customer email, payment, deletion, or support ticket cannot be hand&#8209;waved away. The next boundary is therefore not intelligence; it is capability.</p>
+
+      <h2 id="capabilities" data-num="§ 06 / Capabilities">Tools Are Capabilities, Not Functions</h2>
+
+      <p>The most dangerous word in agent frameworks is &ldquo;tool.&rdquo; It sounds harmless. A tool sounds like a function.</p>
+
+      <pre class="figure" data-label="Looks like a function">search_docs()
+query_salesforce()
+send_slack_message()
+create_jira_ticket()</pre>
+
+      <p>But these are not just functions. They are <em>capabilities</em>. Some tools read data. Some tools mutate the world. Some tools contact customers. Some tools spend money. Some tools create compliance risk.</p>
+
+      <p>A sales assistant should be allowed to draft a renewal note. It should not automatically update the CRM stage, create a discount approval, email procurement, and notify finance because a prompt inferred urgency. In SaaS, &ldquo;tool use&rdquo; is rarely just computation. It is workflow mutation with money, compliance, and customer trust attached.</p>
+
+      <p>An agent should not &ldquo;have tools&rdquo; in the casual sense. It should be granted capabilities under policy<sup class="cite" data-tip="Lampson, Protection (1974)"><a href="#ref-23" style="color:inherit;text-decoration:none;">23</a></sup><sup class="cite" data-tip="Miller, Yee &amp; Shapiro, Capability Myths Demolished (2003)"><a href="#ref-24" style="color:inherit;text-decoration:none;">24</a></sup>. Ning et al. survey the same gap from the harness side: current systems invoke tools too blindly, and future harnesses need multi-tier permission models, capability-based primitives, and human-in-the-loop gates before risky side effects execute.<sup class="cite" data-tip="Ning et al., Code as Agent Harness (2026)"><a href="#ref-45" style="color:inherit;text-decoration:none;">45</a></sup> A production harness needs a tool registry that behaves like a capability registry:</p>
+
+      <pre class="figure" data-label="Capability schema">ToolCapability {
+  name
+  allowed_agents
+  required_user_permission
+  input_schema
+  output_schema
+  risk_level
+  timeout
+  retry_policy
+  approval_required
+}</pre>
+
+      <p>The agent does not call Salesforce directly. It sends a message:</p>
+
+      <pre class="figure" data-label="Capability request">I request capability: query_salesforce_account
+with user_ctx: X
+for account_id: Y</pre>
+
+      <p>Then the system checks:</p>
+
+      <pre class="figure" data-label="Policy gate">Is this tool approved?
+Is this agent allowed to request it?
+Is this user allowed to access that account?
+Is this tenant boundary respected?
+Is human approval required?
+Is the input valid?
+Is the action idempotent?</pre>
+
+      <p>Only then does the tool executor run.</p>
+
+      <p>This is very Erlang in spirit. Processes communicate by messages. They do not reach into each other&rsquo;s memory. They do not mutate the world invisibly. A tool call should be a supervised message to a controlled process. Not a spontaneous side effect from a language model.</p>
+
+      <h2 id="memory" data-num="§ 07 / State">Memory Is State, and State Must Be Governed</h2>
+
+      <p>Agent memory is usually discussed as if it were a magical notebook. It is not. Memory is state. And state is where systems go to die quietly.</p>
+
+      <p>There are at least four kinds of memory in an agentic platform:</p>
+
+      <pre class="figure" data-label="Four memories">session memory
+workflow memory
+agent-local working memory
+durable user/team memory</pre>
+
+      <p>These should not be treated the same. An Erlang-style design separates them naturally. The orchestrator process can own workflow-local memory:</p>
+
+      <pre class="figure" data-label="Workflow memory">current DAG state
+partial results
+retrieved documents
+tool outputs
+pending approvals</pre>
+
+      <p>A sub-agent can own ephemeral working memory:</p>
+
+      <pre class="figure" data-label="Working memory">current task context
+temporary reasoning state
+local cache</pre>
+
+      <p>But durable memory should go through a centralized governed service:</p>
+
+      <pre class="figure tree" data-label="Durable write path">Agent
+ &#8595;
+Memory Service
+ &#8595;
+Policy Engine
+ &#8595;
+Storage
+ &#8595;
+Audit Log</pre>
+
+      <p>A bad durable write is not just bad data. It becomes future context. If an agent stores &ldquo;Acme approved the discount&rdquo; without a source, permission, expiry, and audit trail, that sentence can be retrieved weeks later as if it were fact. Memory bugs are time&#8209;delayed side effects.</p>
+
+      <p>One bad memory write can quietly poison a quarter. A support agent summarizes a call, misreads &ldquo;pending legal review&rdquo; as &ldquo;approved by legal,&rdquo; and stores the sentence in team memory. Two weeks later a sales agent retrieves it, drafts an order form, and the approval appears to have provenance because it came from memory. The original mistake has become institutional state.</p>
+
+      <p>Why? Because durable memory has consequences. It can leak permissions. It can preserve bad assumptions. It can become stale. It can bias future workflows. It can violate deletion requirements. It can cross tenant boundaries.</p>
+
+      <p>Ning et al. name this the <em>implicit harness-state</em> failure: when multiple agents, or the same agent over time, write to memory without a formal substrate, the harness&rsquo;s internal belief diverges from ground truth. Their proposed fix is <em>transactional shared program state</em> &mdash; reads, writes, and conflict policies declared explicitly rather than smuggled through prompts.<sup class="cite" data-tip="Ning et al., Code as Agent Harness (2026)"><a href="#ref-45" style="color:inherit;text-decoration:none;">45</a></sup> Ultrametric repair distance and governed durable writes are one way to supply that substrate without collapsing memory into an undifferentiated vector store.</p>
+
+      <p>The rule should be simple:</p>
+
+      <blockquote>Agents may hold temporary state. Durable memory writes require governance.</blockquote>
+
+      <p>This mirrors the deeper prime-like principle:</p>
+
+      <blockquote class="tight">Irreducible units are allowed to compose, but composition must be lossless, inspectable, and reversible where required.</blockquote>
+
+      <p>Durable memory also needs a distance function. Vector similarity asks which memories are semantically nearby. That is useful, but it is not the same as asking which memories preserve the deepest commitment structure. An ultrametric memory layer ranks memories by preserved hierarchy: user identity, tenant boundary, active workflow, prior commitments, then surface tokens.<sup class="cite" data-tip="Iyer, Geometry of Conditional Logic (2026)"><a href="#ref-42" style="color:inherit;text-decoration:none;">42</a></sup></p>
+
+      <div class="eqn-row">
+        $$ d_R(M, M') \;=\; \alpha^{-v_R(M,M')} $$
+        <div class="caption">Repair distance: closer memories preserve deeper commitment layers</div>
+      </div>
+
+      <p>For example: user identity is deeper than trip context; trip context is deeper than the current restaurant recommendation task; the task is deeper than a surface phrase like &ldquo;Thai food.&rdquo; A good memory system should know that changing cuisine preference is a shallow update, while changing allergy information or tenant identity is not.</p>
+
+      <p>The important number is $v_R$: how many layers survived unchanged. A memory update that changes a restaurant preference but preserves user identity, travel context, and workflow role is shallow repair. A memory update that mutates identity or tenant scope is deep repair and should trigger stronger governance.</p>
+
+      <p>If a system cannot explain why it remembers something, it should not remember it.</p>
+
+      <aside class="breakpoint" id="bp-07" aria-label="Reading checkpoint">
+        <div class="bp-label">Checkpoint &middot; §05&ndash;07</div>
+        <p class="bp-title">Stability, capabilities, memory</p>
+        <ul class="bp-recap">
+          <li>Let it crash; repair locally (<code>z' = z + kM</code>).</li>
+          <li>Tools are capabilities under policy, not raw functions.</li>
+          <li>Durable memory is governed state, not chat history.</li>
+        </ul>
+        <p class="bp-next">Next: retrieval must intersect structure before semantics (§08).</p>
+        <div class="bp-actions"><a href="#memory">Back to §07</a><a href="#retrieval">Continue to §08</a></div>
+      </aside>
+
+      <h2 id="retrieval" data-num="§ 08 / Retrieval">Retrieval Needs Identity Before Intelligence</h2>
+
+      <p>Modern agentic systems rely heavily on retrieval. Vector stores are useful. Embeddings are useful. Semantic search is useful. But retrieval is not just a relevance problem. In enterprise systems, retrieval is a permission problem first.</p>
+
+      <p>The user asks: <em>&ldquo;Summarize Acme&rsquo;s renewal risk.&rdquo;</em></p>
+
+      <p>The system may find semantically relevant documents. But semantic relevance does not imply authorization.</p>
+
+      <p>A concrete failure looks boring. The model retrieves public earnings-call notes, an internal churn score, a private Salesforce field, and a Slack thread containing PII. The generated sentence says only: &ldquo;Acme is at elevated renewal risk.&rdquo; It sounds harmless, but the answer is now a composition of public, confidential, customer, and PII-bearing factors. If it is sent to an external model or logged into a low-trust analytics sink, the leak already happened.</p>
+
+      <p>The retrieval stack should look like this:</p>
+
+      <pre class="figure" data-label="Retrieval pipeline">Vector search finds candidates
+Keyword search finds exact matches
+ACL filter removes unauthorized documents
+Freshness filter removes stale documents
+Ranker selects final context
+LLM receives only allowed chunks</pre>
+
+      <p>This is where structures like Roaring bitmaps matter<sup class="cite" data-tip="Lemire et al., Roaring Bitmaps (2018)"><a href="#ref-35" style="color:inherit;text-decoration:none;">35</a></sup>. A document can be represented by an integer ID. Permissions become compressed sets:</p>
+
+      <pre class="figure" data-label="Compressed permission sets">user_accessible_docs
+tenant_docs
+source_docs
+recent_docs
+project_docs</pre>
+
+      <p>Retrieval becomes fast set intersection:</p>
+
+      <div class="eqn-row">
+        $$ \text{safe\_context} \;=\; S_{\text{sem}} \,\cap\, D_{\text{user}} \,\cap\, D_{\text{tenant}} \,\cap\, F_{\text{fresh}} $$
+        <div class="caption">Bounded composition over identified sets</div>
+      </div>
+
+      <p>Roaring bitmaps are the sparse structural side of this system. They preserve gigantic membership relations without forcing the platform to pay dense costs: which documents a user may see, which memories belong to a tenant, which workflow outputs remain in scope, which audit events attach to a request. The container strategy &mdash; arrays for sparse chunks, bitmaps for dense chunks, runs for long intervals &mdash; is an adaptive topology for permission space.</p>
+
+      <p>But the ranker should not stop at semantic score. A production RAG system needs a second pass for <em>structural compatibility</em>. Embeddings are good at broad recall; ultrametric reranking is good at preserving the hierarchy that matters: same tenant, same role, same workflow phase, same policy regime, same dependency topology. The query &ldquo;deploy canary, monitor, rollback on failure&rdquo; should retrieve plans with the same causal shape, not just documents containing the words deploy, monitor, and rollback.</p>
+
+      <pre class="figure good" data-label="Hybrid retrieval rule">semantic search      → broad candidate recall
+permission filters   → remove impossible context
+ultrametric rerank   → prefer deepest preserved structure
+final context        → relevant, allowed, structurally compatible</pre>
+
+      <p>The important part is <em>timing</em>. Unauthorized data must be filtered <em>before</em> it enters the model context. Not after. Post-filtering the final answer is too late &mdash; the system already exposed the data internally.</p>
+
+      <p>That is identity and hierarchy again. Each document has identity. Each permission scope has identity. The final context is a controlled composition. No collisions. No accidental blending. No unauthorized memory ghosts.</p>
+
+      <p>Retrieval safety is therefore one instance of a larger information&#8209;flow problem. Once data is allowed to compose, the system must preserve the constraints carried by every input. That is where security stops being a perimeter check and becomes algebra.</p>
+
+      <div class="divider">§ &nbsp; § &nbsp; §</div>
+
+      <!-- Arithmetic Security Architecture — major section -->
+      <div class="constraint-card">
+        <div class="sigil">&oplus;</div>
+        <div class="label">Section 09 / Interlude</div>
+        <div class="name">Arithmetic Security Architecture</div>
+        <div class="claim">An older problem returns: Denning's information&#8209;flow lattice, made executable as squarefree integer arithmetic. Composition becomes LCM. Clearance becomes divisibility. Declassification becomes exact factor removal under proof.</div>
+      </div>
+
+      <h2 id="security" data-num="§ 09 / Security">An Older Problem, Newly Executable</h2>
+
+      <p>There is an older name for this problem. In information&#8209;flow security, Dorothy Denning&rsquo;s 1976 lattice model<sup class="cite" data-tip="Denning, A Lattice Model of Secure Information Flow (1976)"><a href="#ref-17" style="color:inherit;text-decoration:none;">17</a></sup><sup class="cite" data-tip="Bell &amp; LaPadula, Secure Computer Systems (1973)"><a href="#ref-19" style="color:inherit;text-decoration:none;">19</a></sup> says that security labels form an ordered structure. When two pieces of information combine, the result must inherit the least upper bound of their sensitivities.</p>
+
+      <p>In plain English:</p>
+
+      <blockquote>If public data mixes with confidential data, the result is confidential.</blockquote>
+
+      <p>This is the high&#8209;water&#8209;mark rule. The composed object rises to the sensitivity of its most constrained inputs.</p>
+
+      <p>Agentic RAG systems rediscover this immediately. A user asks:</p>
+
+      <blockquote class="tight">&ldquo;Compare our internal churn data with public market benchmarks.&rdquo;</blockquote>
+
+      <p>That query is not purely public. It is not purely private. It is a composition. So the system needs to preserve the sensitivity of every information factor through the whole computation. This is where prime encoding stops being a metaphor and becomes representation.</p>
+
+      <p>The compliance nightmare is not usually a dramatic exfiltration. It is a helpful answer routed to the wrong place. A renewal summary gets posted in a shared channel because the final text does not visibly contain an SSN, even though the model used an internal PII-bearing note to produce it. The leak is in the dependency chain, not in the surface words.</p>
+
+      <p>Assign each atomic policy label a distinct prime:</p>
+
+      <pre class="figure" data-label="Prime label catalog">public        = 2
+confidential  = 3
+pii           = 5
+finance       = 7
+eu_region     = 11
+customer_data = 13</pre>
+
+      <p>Then encode a sensitivity label set as a <em>squarefree integer</em> &mdash; a product of distinct primes, one per label. That squarefree condition is the load&#8209;bearing invariant.</p>
+
+      <p>There is no such thing as $\text{confidential}^{2}$. A document is either confidential or it is not. The exponent does not mean &ldquo;more confidential.&rdquo; If exponents ever appear, the semantics have already rotted.</p>
+
+      <p>So:</p>
+
+      <div class="eqn-row">
+        $$ \text{confidential} \,\cdot\, \text{pii} \;=\; 3 \cdot 5 \;=\; 15 $$
+        <div class="caption">Label set encoded as a squarefree product</div>
+      </div>
+
+      <p>The dot is not ordinary multiplication of quantities. It means: <em>this object carries the label set $\{\text{confidential},\, \text{pii}\}$</em>.</p>
+
+      <h3>The Isomorphism</h3>
+
+      <p>Under this squarefree restriction, the divisor lattice of these integers is order&#8209;isomorphic to the Boolean lattice of label sets:</p>
+
+      <div class="eqn-row">
+        $$ \bigl(\, \mathbb{N}_{\text{sqfree}},\; \mathrm{lcm},\; \gcd,\; \mid \,\bigr) \;\;\cong\;\; \bigl(\, 2^{L},\; \cup,\; \cap,\; \subseteq \,\bigr) $$
+        <div class="caption">An actual isomorphism &mdash; not analogy, not &ldquo;spirit of&rdquo;</div>
+      </div>
+
+      <p>That is the precise claim. Every operation lands:</p>
+
+      <div class="bridge">
+        <div class="col">
+          <h4>Arithmetic</h4>
+          <dl>
+            <dt>Join</dt><dd>lcm(A, B)</dd>
+            <dt>Meet</dt><dd>gcd(A, B)</dd>
+            <dt>Order</dt><dd>A &nbsp;|&nbsp; B &nbsp;(divides)</dd>
+          </dl>
+        </div>
+        <div class="col">
+          <h4>Lattice</h4>
+          <dl>
+            <dt>Join</dt><dd>union of labels</dd>
+            <dt>Meet</dt><dd>intersection of labels</dd>
+            <dt>Order</dt><dd>subset containment</dd>
+          </dl>
+        </div>
+        <div class="col">
+          <h4>Bitwise</h4>
+          <dl>
+            <dt>Join</dt><dd>A | B &nbsp;(OR)</dd>
+            <dt>Meet</dt><dd>A &amp; B &nbsp;(AND)</dd>
+            <dt>Order</dt><dd>A &amp; B == A</dd>
+          </dl>
+        </div>
+      </div>
+
+      <p>So if:</p>
+
+      <pre class="figure" data-label="Two labeled objects">A = confidential &times; pii      = 3 &times; 5  = 15
+B = finance &times; eu_region     = 7 &times; 11 = 77</pre>
+
+      <p>then the sensitivity of their composition is:</p>
+
+      <div class="eqn-row">
+        $$ \mathrm{Sens}(A \oplus B) \;=\; \mathrm{lcm}(15,\, 77) \;=\; 3 \cdot 5 \cdot 7 \cdot 11 $$
+        <div class="caption">Lattice join, expressed as LCM</div>
+      </div>
+
+      <p>The operation is <em>LCM</em>, not ordinary multiplication. The two only coincide when the label sets are disjoint. Cross&#8209;document composition is not $A \cdot B$; it is $\mathrm{lcm}(A, B)$. That distinction matters &mdash; it&rsquo;s the difference between correct semantics and a class of subtle bugs.</p>
+
+      <h3>Clearance Is Divisibility</h3>
+
+      <p>A runtime, tool, or agent capability is also encoded as a squarefree product of the labels it is allowed to handle:</p>
+
+      <pre class="figure" data-label="Runtime capabilities">external_llm_capability    = public = 2
+
+on_prem_runtime_capability = confidential &times; pii &times; finance &times; eu_region &times; customer_data
+                           = 3 &times; 5 &times; 7 &times; 11 &times; 13</pre>
+
+      <p>A runtime can process an object only if the object&rsquo;s sensitivity divides the runtime&rsquo;s capability:</p>
+
+      <div class="eqn-row">
+        $$ \mathrm{allowed}(R,\, O) \;\;\iff\;\; \mathrm{Sens}(O) \,\Big|\, \mathrm{Cap}(R) $$
+        <div class="caption">Clearance as a divisibility check</div>
+      </div>
+
+      <p>So $\mathrm{Cap}(\text{external\_llm}) \bmod \mathrm{Sens}(\text{conf} \cdot \text{pii}) \neq 0$ &rarr; <span style="color:var(--red)">denied</span>. But $\mathrm{Cap}(\text{on\_prem}) \bmod \mathrm{Sens}(\text{conf} \cdot \text{pii}) = 0$ &rarr; <span style="color:var(--green)">allowed</span>. That is not vibes&#8209;based routing. That is exact containment.</p>
+
+      <p>Diffie&#8209;Hellman belongs one layer below this policy model.<sup class="cite" data-tip="Diffie &amp; Hellman, New Directions in Cryptography (1976)"><a href="#ref-25" style="color:inherit;text-decoration:none;">25</a></sup> The label lattice decides whether two principals are allowed to share a context; key agreement is one way they can derive the cryptographic material for that context without exposing it on the wire. Divisibility answers <em>may this runtime know it?</em> Diffie&#8209;Hellman answers <em>can these parties establish the secret needed to read it?</em> The two layers should reinforce each other, not pretend to be the same thing.</p>
+
+      <p>ChaCha lives in the same lower layer as fast secure state evolution.<sup class="cite" data-tip="Bernstein, ChaCha, a variant of Salsa20 (2008)"><a href="#ref-26" style="color:inherit;text-decoration:none;">26</a></sup> Its quarter&#8209;rounds are local, invertible, diffusion&#8209;heavy, cache&#8209;friendly, and streamable. That makes an interesting contrast with Roaring bitmaps: Roaring preserves sparse structure so permissions remain distinguishable; ChaCha destroys exploitable structure so session material becomes unpredictable. One optimizes set algebra. The other optimizes entropy diffusion.</p>
+
+      <pre class="figure good" data-label="Structure and diffusion stack">Prime labels         &rarr; semantic invariants
+Roaring bitmaps      &rarr; scalable sparse realization
+ChaCha streams       &rarr; secure dynamic propagation
+OTP supervision      &rarr; local fault containment
+Ihara cycles         &rarr; topology of recurrence</pre>
+
+      <h3>Why Bitsets Are Not Just Similar</h3>
+
+      <p>In production, you probably would not store label catalogs as giant prime products. The primorial of the first 200 primes is enormous &mdash; around $10^{530}$. A 200&#8209;label bitset is 200 bits, or 25 bytes. The bigint arithmetic is what you pay for the conceptual clarity.</p>
+
+      <p>So the practical implementation is almost certainly bitsets, Roaring bitmaps, or policy&#8209;engine label sets. But the important point is that bitsets are not merely &ldquo;similar&rdquo; to the prime encoding.</p>
+
+      <blockquote>They are the same lattice in different notation.</blockquote>
+
+      <div id="viz-label-lattice" class="viz-panel" data-label="Confidentiality label lattice (Hasse diagram)" data-accent="purple" data-height="300"></div>
+
+      <p>The prime encoding is pedagogically powerful because it turns abstract lattice operations into familiar arithmetic. The bitset version is what you deploy. The prime version is what helps people finally see the structure.</p>
+
+      <h3>OLAP Was Already Doing This</h3>
+
+      <p>Database systems have lived with a sibling of this structure for decades. OLAP cubes, star schemas, bitmap indexes, cuboids, and <code style="color:var(--cyan)">GROUP BY</code> lattices are all ways of navigating factored discrete dimensions efficiently.<sup class="cite" data-tip="Gray et al., Data Cube (1997)"><a href="#ref-43" style="color:inherit;text-decoration:none;">43</a></sup><sup class="cite" data-tip="Harinarayan, Rajaraman &amp; Ullman, Implementing Data Cubes Efficiently (1996)"><a href="#ref-44" style="color:inherit;text-decoration:none;">44</a></sup> A fact table row is not just a record. It is a point in a product of dimensions: region, quarter, product, segment, channel, tenant, and time.</p>
+
+      <p>Assign each dimension a distinct prime, and a cuboid gets a canonical squarefree name:</p>
+
+      <div class="eqn-row">
+        $$ \mathrm{cuboid}(D) \;=\; \prod_{d \in D} p_d $$
+        <div class="caption">A cuboid as a squarefree product of dimensions</div>
+      </div>
+
+      <p>Then the OLAP lattice lands in the same arithmetic:</p>
+
+      <div class="eqn-row">
+        $$ D_1 \subseteq D_2 \;\;\iff\;\; \mathrm{cuboid}(D_1) \mid \mathrm{cuboid}(D_2) $$
+        <div class="caption">Aggregation compatibility as divisibility</div>
+      </div>
+
+      <pre class="figure" data-label="OLAP lattice arithmetic">drilldown          = multiply by a dimension prime
+rollup             = divide by a dimension prime
+shared dimensions  = gcd(A, B)
+combined slice     = lcm(A, B)
+compatible rollup  = divisibility</pre>
+
+      <p>For example, $\mathrm{Sales}(\text{region}, \text{quarter}, \text{product})$ carries $2 \cdot 3 \cdot 5 = 30$. $\mathrm{Sales}(\text{region}, \text{quarter})$ carries $2 \cdot 3 = 6$. Since $6 \mid 30$, the detailed cuboid can roll up into the coarser one without changing semantic axes. Database people call this aggregation. The algebra says factor removal under a lawful projection.</p>
+
+      <h3>The General Object Algebra</h3>
+
+      <p>At this point the pattern is bigger than security labels. A production object is not a blob; it is a factored tuple:</p>
+
+      <div class="eqn-row">
+        $$ X := (i,\; s,\; c,\; q,\; \tau,\; a) $$
+        <div class="caption">identity, sensitivity, capability, quantity, topology, audit provenance</div>
+      </div>
+
+      <p>Composition should respect each coordinate instead of flattening them into prose. Identities compose into traceable compound identity. Sensitivities join by LCM. Capability requirements join by LCM. Quantity or risk mass accumulates. Topological position composes along the workflow graph. Audit provenance hashes forward.</p>
+
+      <div class="eqn-row">
+        $$ X \otimes Y =
+        \bigl(i_X \oplus i_Y,\; \mathrm{lcm}(s_X,s_Y),\; \mathrm{lcm}(c_X,c_Y),\; q_X + q_Y,\; \tau_X \circ \tau_Y,\; H(a_X \Vert a_Y)\bigr) $$
+        <div class="caption">Lawful composition over factored production objects</div>
+      </div>
+
+      <p>This is where this essay has to point outward. OLAP cuboids, bitmap indexes, permission lattices, cryptographic stream state, workflow topology, and audit chains all suggest a more general algebra of factored objects. That deserves its own essay. For now, the important point is narrower: agent systems should not collapse these coordinates into one string of context and hope the model remembers the laws.</p>
+
+      <h3>Declassification Is Exact Factor Removal &mdash; Sometimes</h3>
+
+      <p>Prime encoding gives a clean model for one kind of declassification. Suppose raw data carries:</p>
+
+      <pre class="figure" data-label="Before transformation">raw_data = confidential &times; pii &times; customer_data
+         = 3 &times; 5 &times; 13</pre>
+
+      <p>A verified anonymization process claims to remove PII. Then:</p>
+
+      <div class="eqn-row">
+        $$ \mathrm{declassified} \;=\; \frac{\mathrm{raw\_data}}{\,\mathrm{pii}\,} \;=\; \frac{3 \cdot 5 \cdot 13}{5} \;=\; 3 \cdot 13 $$
+        <div class="caption">Declassification as exact factor removal</div>
+      </div>
+
+      <p>This is valid only if $\mathrm{raw\_data} \bmod \mathrm{pii} = 0$, and only if the transformation is approved, audited, and tied to a proof artifact. So the system records:</p>
+
+      <pre class="figure good" data-label="Audited declassification record">before_sensitivity
+transformation_id
+removed_factor
+proof_or_policy_reference
+after_sensitivity
+approver
+audit_event</pre>
+
+      <p>No magic downgrade. No &ldquo;trust me bro&rdquo; masking. No vibes&#8209;based declassification.</p>
+
+      <p>But this division model only handles <em>absolute declassification</em> &mdash; the label is gone for everyone, forever, after a verified transformation. Real systems often need <em>relational declassification</em>:</p>
+
+      <pre class="figure" data-label="Conditional regimes">PII to marketing, aggregate-safe to research
+confidential until 2030, public afterward
+shareable in region A, forbidden in region B
+visible to this tenant, invisible to that tenant</pre>
+
+      <p>Those are not simple factor removals. They depend on receiver, time, purpose, jurisdiction, or context. That requires a richer model &mdash; closer to receiver&#8209;labeled policies such as Myers and Liskov&rsquo;s Decentralized Label Model<sup class="cite" data-tip="Myers &amp; Liskov, A Decentralized Model for Information Flow Control (1997)"><a href="#ref-20" style="color:inherit;text-decoration:none;">20</a></sup>. Prime divisibility gives the clean base lattice. It does not solve every policy regime alone.</p>
+
+      <h3>Confidentiality Is Only One Lattice</h3>
+
+      <p>There is another scope boundary worth stating. This section is about <em>confidentiality</em>: preventing high&#8209;sensitivity information from flowing into lower&#8209;trust sinks. But information&#8209;flow systems also care about <em>integrity</em>.</p>
+
+      <p>Confidentiality asks: <em>can secret data flow downward?</em> Integrity asks: <em>can low&#8209;trust data flow upward into high&#8209;trust decisions?</em></p>
+
+      <p>A public web page may be low&#8209;confidentiality but also low&#8209;integrity. You may be allowed to read it, but not allowed to let it directly update a financial forecast, compliance report, or customer&#8209;facing action without verification.</p>
+
+      <p>So a complete label is better modeled as a pair:</p>
+
+      <div class="eqn-row">
+        $$ \mathrm{Label} \;=\; \bigl(\, \mathrm{Conf}_{\text{prod}},\; \mathrm{Integ}_{\text{prod}} \,\bigr) $$
+        <div class="caption">Two lattices, same algebraic discipline</div>
+      </div>
+
+      <p>For hybrid RAG, that means public data is not automatically &ldquo;safe.&rdquo; It may be safe to send outward, but unsafe to trust inward. A public source can poison an internal workflow through prompt injection, stale data, or malicious content. So the architecture needs both:</p>
+
+      <pre class="figure tree" data-label="Two flow directions">confidentiality controls
+  &rarr; what data may leave
+
+integrity controls
+  &rarr; what data may influence</pre>
+
+      <p>Different lattices. Different failures. Same algebraic discipline.</p>
+
+      <h3>Quantity Still Needs Another Layer</h3>
+
+      <p>The prime model captures label presence. It does not capture quantity. One customer record and ten thousand customer records both carry $\text{customer\_data} \cdot \text{pii}$ &mdash; but they do not carry the same risk.</p>
+
+      <p>Quantity matters for k&#8209;anonymity, re&#8209;identification risk, breach&#8209;notification thresholds, aggregation safety, differential&#8209;privacy budgets, and bulk export controls. So the full risk model needs three orthogonal axes:</p>
+
+      <div class="eqn-row">
+        $$ \mathrm{risk} \;=\; f\bigl(\, \mathrm{labels}_{\text{sqfree}},\; \mathrm{quantity},\; \mathrm{receiver},\; \mathrm{purpose},\; \mathrm{context} \,\bigr) $$
+        <div class="caption">Type, magnitude, and context &mdash; layered, not collapsed</div>
+      </div>
+
+      <p>Prime encoding handles irreducible label identity. It intentionally flattens quantity. That is a feature for the label lattice, but a limit for risk modeling.</p>
+
+      <h3>The Production RAG Rule</h3>
+
+      <p>Now the hybrid RAG architecture becomes precise. Every retrieved chunk, intermediate summary, model call, tool output, and generated answer carries a sensitivity product. Composition uses LCM. Routing uses divisibility. Declassification uses audited exact factor removal when valid. Implementation almost certainly uses bitsets.</p>
+
+      <p>So the architecture becomes:</p>
+
+      <pre class="figure tree" data-label="Hybrid RAG with arithmetic security">User Query
+ &#8595;
+Query Factorizer
+ &#8595;
+Sensitivity Labeler
+ &#8595;
+Public Retrieval Path  +  Internal Retrieval Path
+ &#8595;
+LCM Join of Sensitivities
+ &#8595;
+Policy Engine
+ &#8595;
+Allowed Runtime Selection
+ &#8595;
+On-Prem Synthesis &nbsp;if confidential factors exist
+ &#8595;
+Output Guardrails
+ &#8595;
+Audit Log</pre>
+
+      <p>If confidential information participates in the composition, the composed answer inherits that factor:</p>
+
+      <div class="eqn-row">
+        $$ \text{public} \,\oplus\, \text{confidential} \;=\; \text{confidential} $$
+        <div class="caption">Not a policy preference &mdash; the lattice law</div>
+      </div>
+
+      <p>Prime encoding just makes the law executable enough to wire into routing.</p>
+
+      <blockquote>Agentic systems leak information not because they cannot reason, but because they compose context without preserving the algebra of its constraints.</blockquote>
+
+      <p>Arithmetic security architecture fixes that specific failure class: every sensitivity is a squarefree factor set, every composition is an LCM, every clearance check is divisibility, and every declassification must prove the exact factor it removed.</p>
+
+      <div class="divider">§ &nbsp; § &nbsp; §</div>
+
+      <aside class="breakpoint" id="bp-09" aria-label="Reading checkpoint">
+        <div class="bp-label">Checkpoint &middot; §09</div>
+        <p class="bp-title">Arithmetic security + OLAP lattice</p>
+        <ul class="bp-recap">
+          <li>Join = LCM; clearance = divisibility; declass = factor removal.</li>
+          <li>Roaring preserves structure; ChaCha diffuses secrets.</li>
+          <li>Cuboids are squarefree products; rollups are divisibility.</li>
+        </ul>
+        <p class="bp-next">Next: production harness topology + invariant layers (§10).</p>
+        <div class="bp-actions"><a href="artifacts/lattice_lab.py">Run lattice lab</a><a href="#architecture">Continue to §10</a></div>
+      </aside>
+
+      <h2 id="architecture" data-num="§ 10 / Synthesis">The Real Agentic Architecture</h2>
+
+      <p>If we put all of this together, a production-grade agentic system should not look like a giant brain. It should look like an OTP system:</p>
+
+      <pre class="figure tree" data-label="Production topology">Agent Platform Supervisor
+ &#9500;&#9472;&#9472; Gateway
+ &#9500;&#9472;&#9472; Auth Service
+ &#9500;&#9472;&#9472; Policy Engine
+ &#9500;&#9472;&#9472; Workflow Supervisor
+ &#9474;    &#9500;&#9472;&#9472; Orchestrator
+ &#9474;    &#9500;&#9472;&#9472; Docs Agent
+ &#9474;    &#9500;&#9472;&#9472; CRM Agent
+ &#9474;    &#9500;&#9472;&#9472; Data Agent
+ &#9474;    &#9492;&#9472;&#9472; Slack Agent
+ &#9474;
+ &#9500;&#9472;&#9472; Tool Registry
+ &#9500;&#9472;&#9472; Tool Executor Pools
+ &#9500;&#9472;&#9472; Memory Service
+ &#9500;&#9472;&#9472; Retrieval Service
+ &#9500;&#9472;&#9472; ACL Bitmap Service
+ &#9500;&#9472;&#9472; Human Approval Service
+ &#9500;&#9472;&#9472; Audit Logger
+ &#9492;&#9472;&#9472; Evaluation Workers</pre>
+
+      <p>Every request becomes a workflow. Every workflow becomes a supervised process tree. Every sub-agent is a bounded worker. Every tool is a capability. Every side effect is audited. Every risky action can be suspended for approval. Every failure is local, typed, and recoverable.</p>
+
+      <p>That is not less agentic.</p>
+
+      <blockquote>That is what makes agency safe enough to matter.</blockquote>
+
+      <div id="viz-architecture" class="viz-panel" data-label="Production topology (radial)" data-accent="cyan" data-height="400"></div>
+
+      <h2 id="harness-invariants" data-num="§ 10a / Harness Invariants">Invariant Layers for Agent Harnesses</h2>
+
+      <p>Ning et al. organize harness engineering into interface, mechanism, and multi-agent scaling layers.<sup class="cite" data-tip="Ning et al., Code as Agent Harness (2026)"><a href="#ref-45" style="color:inherit;text-decoration:none;">45</a></sup> This essay adds a fourth layer underneath all three: <em>invariant structure</em> &mdash; the same move Codd made beneath navigational databases.<sup class="cite" data-tip="Codd, A Relational Model of Data (1970)"><a href="#ref-46" style="color:inherit;text-decoration:none;">46</a></sup> See <a href="#codasyl-era">The CODASYL Era of Agent Systems</a>. The harness interface can be elegant. The planning loop can be clever. If composition does not preserve identity, sensitivity, topology, and provenance, scale will still break the system.</p>
+
+      <p>The mapping is direct. Each open harness problem has a practice the industry already uses &mdash; and an invariant this essay argues should be enforced by the runtime, not hoped for in the prompt:</p>
+
+      <pre class="figure wide" data-label="Harness problem → invariant layer">Harness problem              Current practice                 Invariant layer
+─────────────────────────────────────────────────────────────────────────────────
+Multi-agent orchestration    planner / coder / reviewer       OTP supervision topology
+Permissioning                tool ACLs, RBAC strings          prime divisibility lattice
+Memory &amp; shared state        vector stores, chat history      ultrametric repair geometry
+Workflow retries             fixed backoff, jitter heuristics   spectral cycle damping (ρ)
+Shared composition           context concat, blackboards        factor-preserving LCM joins
+Verification                 eval harnesses, unit tests       executable divisibility checks</pre>
+
+      <p>Notice what this table does <em>not</em> claim. It does not say primes are a metaphor for agents. It says squarefree encodings, LCM joins, and divisibility checks are <em>operational semantics</em> &mdash; the same way a type system is not a metaphor for integers. When two harness artifacts merge, sensitivity must join by $\mathrm{lcm}$, not by string concatenation. When a runtime authorizes a tool call, clearance must be $\mathrm{rem}(\mathrm{cap}, \mathrm{sens}) = 0$, not a model&rsquo;s guess. When a workflow step fails, repair radius should equal blast radius, not platform-wide restart.</p>
+
+      <p>Harness-state objects make this concrete. Every durable artifact in a production harness &mdash; a workflow step, a retrieved chunk, a tool result, an audit event &mdash; should carry factored coordinates rather than collapsing into prose:</p>
+
+      <div class="eqn-row">
+        $$ X := (i,\; s,\; c,\; q,\; \tau,\; a) $$
+        <div class="caption">identity, sensitivity, capability, quantity, topology, audit provenance</div>
+      </div>
+
+      <p>Composition is then a harness transition, not a chat append:</p>
+
+      <div class="eqn-row">
+        $$ X \otimes Y =
+        \bigl(i_X \oplus i_Y,\; \mathrm{lcm}(s_X,s_Y),\; \mathrm{lcm}(c_X,c_Y),\; q_X + q_Y,\; \tau_X \circ \tau_Y,\; H(a_X \Vert a_Y)\bigr) $$
+        <div class="caption">Lawful merge over harness-state objects</div>
+      </div>
+
+      <p>The full algebra of factored objects deserves its own essay. For harness engineering, the immediate lesson is narrower: <strong>do not let the LLM be the only place where invariants live.</strong> The harness runtime must enforce them on every merge, every tool call, every memory write, and every retry.</p>
+
+      <aside class="breakpoint" id="bp-10a" aria-label="Reading checkpoint">
+        <div class="bp-label">Checkpoint &middot; §10a</div>
+        <p class="bp-title">Harness invariants mapped</p>
+        <ul class="bp-recap">
+          <li>Every harness problem has a runtime invariant, not a prompt fix.</li>
+          <li><code>X := (i,s,c,q,τ,a)</code>; merge = LCM + provenance hash.</li>
+          <li>CODASYL &rarr; relational move: govern state, derive topology.</li>
+        </ul>
+        <p class="bp-next">Next: six-pillar bridge, then executable proof (§11&ndash;12).</p>
+        <div class="bp-actions"><a href="artifacts/harness_compose.py">Run harness compose</a><a href="#bridge">Continue to §11</a></div>
+      </aside>
+
+      <h2 id="bridge" data-num="§ 11 / Bridge">The Prime&ndash;Erlang Bridge</h2>
+
+      <p>Now the connection becomes visible. Primes are irreducible units of arithmetic. Erlang processes are irreducible units of computation. Denning labels are irreducible units of information flow. SOLID responsibilities are irreducible units of software design. CAP replicas are irreducible units of distributed state. Prime cycles on the runtime graph are irreducible units of closed behavior. All six are trying to solve the same abstraction problem:</p>
+
+      <blockquote>How do you build large, complex, potentially infinite behavior from small units that preserve identity under composition?</blockquote>
+
+      <div class="bridge wide">
+        <div class="col">
+          <h4>Primes</h4>
+          <dl>
+            <dt>Unit</dt><dd>prime</dd>
+            <dt>Composition</dt><dd>multiplication</dd>
+            <dt>Global structure</dt><dd>integers</dd>
+            <dt>Guarantee</dt><dd>unique factorization</dd>
+          </dl>
+        </div>
+        <div class="col">
+          <h4>Erlang<sup class="cite" data-tip="Armstrong, Programming Erlang (2013)" style="margin-left:6px;"><a href="#ref-1" style="color:inherit;text-decoration:none;">1</a></sup></h4>
+          <dl>
+            <dt>Unit</dt><dd>process</dd>
+            <dt>Composition</dt><dd>messages + supervision</dd>
+            <dt>Global structure</dt><dd>distributed system</dd>
+            <dt>Guarantee</dt><dd>fault isolation</dd>
+          </dl>
+        </div>
+        <div class="col">
+          <h4>Denning<sup class="cite" data-tip="Denning, A Lattice Model of Secure Information Flow (1976)" style="margin-left:6px;"><a href="#ref-17" style="color:inherit;text-decoration:none;">17</a></sup></h4>
+          <dl>
+            <dt>Unit</dt><dd>label atom</dd>
+            <dt>Composition</dt><dd>lattice join (LCM)</dd>
+            <dt>Global structure</dt><dd>flow lattice</dd>
+            <dt>Guarantee</dt><dd>non-leaky composition</dd>
+          </dl>
+        </div>
+        <div class="col">
+          <h4>SOLID<sup class="cite" data-tip="Parnas, On the Criteria... (1972)" style="margin-left:6px;"><a href="#ref-27" style="color:inherit;text-decoration:none;">27</a></sup></h4>
+          <dl>
+            <dt>Unit</dt><dd>responsibility</dd>
+            <dt>Composition</dt><dd>typed interfaces</dd>
+            <dt>Global structure</dt><dd>maintainable software</dd>
+            <dt>Guarantee</dt><dd>substitutability under change</dd>
+          </dl>
+        </div>
+        <div class="col">
+          <h4>CAP<sup class="cite" data-tip="Brewer, CAP Twelve Years Later (2012)" style="margin-left:6px;"><a href="#ref-16" style="color:inherit;text-decoration:none;">16</a></sup></h4>
+          <dl>
+            <dt>Unit</dt><dd>replica</dd>
+            <dt>Composition</dt><dd>replication under partition</dd>
+            <dt>Global structure</dt><dd>distributed datastore</dd>
+            <dt>Guarantee</dt><dd>explicit tradeoff under partition</dd>
+          </dl>
+        </div>
+        <div class="col">
+          <h4>Ihara<sup class="cite" data-tip="Ihara, On the Zeta-Functions of a Finite Graph (1966)" style="margin-left:6px;"><a href="#ref-39" style="color:inherit;text-decoration:none;">39</a></sup></h4>
+          <dl>
+            <dt>Unit</dt><dd>prime cycle</dd>
+            <dt>Composition</dt><dd>closed-walk concatenation</dd>
+            <dt>Global structure</dt><dd>graph zeta $\zeta_G$</dd>
+            <dt>Guarantee</dt><dd>cycles readable in spectrum</dd>
+          </dl>
+        </div>
+      </div>
+
+      <p>This is why the analogy matters. Not because agent systems literally run on prime numbers. Not because Erlang is secretly number theory. Every column above describes the same shape: irreducible units, lawful composition, preserved invariants.</p>
+
+      <p>Every durable engineering principle in this essay is a constraint on lawful composition. Primes constrain how integers compose. OTP constrains how processes compose. Denning constrains how labels compose. SOLID constrains how modules compose. CAP names what cannot compose under partition. Ihara zeta names how closed loops accumulate on the topology you actually run. Different battlefields, same problem: <em>how do local truths survive global assembly?</em></p>
+
+      <p>OLAP cuboids belong in the same family, even though the vocabulary comes from databases instead of distributed runtimes. They are factored dimensions, lawful rollups, sparse set realization, and aggregation lattices. The next essay will pull on that thread directly: what happens when every agent object is treated as a factored coordinate with identity, sensitivity, quantity, topology, and provenance?</p>
+
+      <blockquote>Systems that survive scale are built from units that cannot be confused with each other.</blockquote>
+
+      <div id="viz-bridge" class="viz-panel" data-label="Six-pillar bridge (force layout)" data-accent="pink" data-height="360"></div>
+      <p class="viz-hint">Drag nodes — lawful composition at center</p>
+
+      <div class="divider">§ &nbsp; § &nbsp; §</div>
+
+      <!-- FactorAgent — runnable artifact -->
+      <div class="constraint-card">
+        <div class="sigil">&lambda;</div>
+        <div class="label">Section 12 / Artifact</div>
+        <div class="name">FactorAgent</div>
+        <div class="claim">A minimal invariant-preserving harness runtime. Elixir, OTP, prime labels, LCM composition, divisibility clearance, audit log &mdash; the smallest legit version of everything above. The abstraction holds if the abstraction compiles.</div>
+      </div>
+
+      <h2 id="factoragent" data-num="§ 12 / Artifact">A Hundred Lines of Arithmetic Security</h2>
+
+      <p>Everything above is a claim. This section is a proof &mdash; or at least the smallest non&#8209;trivial executable artifact the claim can be reduced to. The language is Elixir, because OTP is the runtime the essay has been pointing at the whole time, and Elixir is the friendliest dialect of it. The system is called <em>FactorAgent</em>. It is not a toy chatbot. It is a tiny governed agent runtime that the essay's prose can stand on. <strong>Runnable source:</strong> <a href="artifacts/factor_agent/README.md">artifacts/factor_agent/</a> (with <a href="artifacts/lattice_lab.py">lattice_lab.py</a> and <a href="artifacts/harness_compose.py">harness_compose.py</a> for the algebra slices).</p>
+
+      <p>A companion research repository, <a href="https://github.com/sethuiyer/geometry-of-conditional-logic" target="_blank" rel="noopener">Geometry of Conditional Logic</a>, explores the adjacent repair problem: how to preserve locked commitments exactly while repairing only the disturbed part of a structured discrete system.<sup class="cite" data-tip="Iyer, Geometry of Conditional Logic (2026)"><a href="#ref-42" style="color:inherit;text-decoration:none;">42</a></sup> FactorAgent uses the smaller security slice of that idea. The broader lesson is the same: state changes should be local, auditable, rollbackable, and governed by invariants rather than vibes.</p>
+
+      <p>The minimum it has to prove:</p>
+
+      <pre class="figure good" data-label="Must demonstrate">Agents are supervised workers
+Tools are capabilities, not direct functions
+Data carries squarefree sensitivity labels
+Composition uses LCM
+Runtime and tool access use divisibility
+Every action emits an audit event</pre>
+
+      <div id="viz-factor-flow" class="viz-panel" data-label="FactorAgent message flow" data-accent="green" data-height="260"></div>
+      <p class="viz-hint">Policy check before tool execution</p>
+
+      <aside class="breakpoint" id="bp-12" aria-label="Reading checkpoint">
+        <div class="bp-label">Checkpoint &middot; §12</div>
+        <p class="bp-title">The essay compiles here</p>
+        <ul class="bp-recap">
+          <li>FactorAgent = minimal invariant-preserving harness runtime.</li>
+          <li>Denial is <code>rem(cap, sens) ≠ 0</code>, not model judgment.</li>
+          <li>Run: <code>cd artifacts/factor_agent && mix run -e "FactorAgent.Demo.run()"</code></li>
+        </ul>
+        <p class="bp-next">Skim the Elixir below, or run the artifact and read the audit trace.</p>
+        <div class="bp-actions"><a href="artifacts/factor_agent/README.md">FactorAgent repo</a><a href="#research-agenda">Skip to agenda</a></div>
+      </aside>
+
+      <h3>Architecture</h3>
+
+      <p>One OTP application, one top&#8209;level supervisor, a flat set of named GenServers. No clever metaprogramming. Easy to read; easy to crash; easy to restart:</p>
+
+      <pre class="figure tree" data-label="Supervision tree">FactorAgent.Application
+ &#9492;&#9472;&#9472; Supervisor
+      &#9500;&#9472;&#9472; AuditLog
+      &#9500;&#9472;&#9472; PolicyEngine
+      &#9500;&#9472;&#9472; ToolRegistry
+      &#9500;&#9472;&#9472; MemoryService
+      &#9500;&#9472;&#9472; Orchestrator
+      &#9492;&#9472;&#9472; AgentSupervisor
+           &#9500;&#9472;&#9472; DocsAgent
+           &#9500;&#9472;&#9472; PublicAgent
+           &#9492;&#9472;&#9472; SynthesisAgent</pre>
+
+      <h3>Prime Labels</h3>
+
+      <p>The label catalog is a single module. Every policy atom is a distinct prime; the empty label set encodes to <code style="color:var(--purple)">1</code>, which makes <em>public</em> the lattice identity by construction &mdash; any runtime divides <code style="color:var(--purple)">1</code>, so public information flows everywhere without special&#8209;casing. <code style="color:var(--cyan)">join/2</code> is LCM. <code style="color:var(--cyan)">allowed?/2</code> is divisibility. <code style="color:var(--cyan)">remove_factor/2</code> is exact division with an existence check &mdash; declassification under proof.</p>
+
+      <pre class="code" data-label="lib/factor_agent/labels.ex" data-lang="Elixir"><code class="language-elixir">defmodule FactorAgent.Labels do
+  @labels %{
+    confidential:  3,
+    pii:           5,
+    finance:       7,
+    eu_region:    11,
+    customer_data: 13
+  }
+
+  # Empty label set → 1 (lattice identity, "public")
+  def encode([]),     do: 1
+  def encode(labels), do:
+    labels
+    |> Enum.uniq()
+    |> Enum.map(&amp;Map.fetch!(@labels, &amp;1))
+    |> Enum.product()
+
+  # Lattice join over squarefree integers = LCM
+  def join(a, b), do: div(a * b, Integer.gcd(a, b))
+
+  # Object's sensitivity must divide the runtime's capability
+  def allowed?(object_sensitivity, runtime_capability) do
+    rem(runtime_capability, object_sensitivity) == 0
+  end
+
+  # Exact factor removal — only valid if the factor is present
+  def remove_factor(sensitivity, label) do
+    factor = Map.fetch!(@labels, label)
+    if rem(sensitivity, factor) == 0 do
+      {:ok, div(sensitivity, factor)}
+    else
+      {:error, :factor_not_present}
+    end
+  end
+end</code></pre>
+
+      <p>Two notes on this. First, <code style="color:var(--yellow)">:public</code> is intentionally not in the catalog. The essay frames public as the absence of restrictions, not a restriction of its own; the bottom of the lattice, not an element peer to confidential. Encoding it as <code style="color:var(--purple)">1</code> makes that exact: a public chunk has sensitivity <code style="color:var(--purple)">1</code>, every runtime capability is divisible by <code style="color:var(--purple)">1</code>, public information flows everywhere by construction. Second, the catalog is also missing an integrity dimension &mdash; a complete label is really <code style="color:var(--cyan)">(Conf_prod, Integ_prod)</code>. The minimum demo handles only confidentiality; <code style="color:var(--fg-3)">// TODO: integrity lattice</code> is left as a marker, not waved away.</p>
+
+      <h3>Tool Registry</h3>
+
+      <p>Tools are not function pointers. They are <em>capabilities</em>: a name, an owning agent, a capability product, a risk class. The registry is defined as a function rather than a module attribute so the label encodings happen at call time &mdash; a clean dependency rule that avoids compile&#8209;time ordering surprises.</p>
+
+      <pre class="code" data-label="lib/factor_agent/tool_registry.ex" data-lang="Elixir"><code class="language-elixir">defmodule FactorAgent.ToolRegistry do
+  use GenServer
+  alias FactorAgent.Labels
+
+  def start_link(_), do: GenServer.start_link(__MODULE__, nil, name: __MODULE__)
+
+  def init(_), do: {:ok, tools()}
+
+  def get(tool), do: GenServer.call(__MODULE__, {:get, tool})
+
+  def handle_call({:get, tool}, _from, tools) do
+    {:reply, Map.fetch(tools, tool), tools}
+  end
+
+  defp tools do
+    %{
+      public_search: %{
+        agent:      :public_agent,
+        capability: Labels.encode([]),                     # 1 — flows anywhere
+        risk:       :low
+      },
+      internal_docs_search: %{
+        agent:      :docs_agent,
+        capability: Labels.encode([:confidential, :customer_data]),
+        risk:       :medium
+      },
+      synthesize_answer: %{
+        agent:      :synthesis_agent,
+        capability: Labels.encode([
+          :confidential, :pii, :finance, :eu_region, :customer_data
+        ]),
+        risk:       :medium
+      }
+    }
+  end
+end</code></pre>
+
+      <h3>Audit Log</h3>
+
+      <p>Every meaningful action in the system emits one event. The audit log is a process that prepends to an in&#8209;memory list and prints to stdout &mdash; trivial enough to read in a terminal, structured enough that swapping the cast for an append&#8209;only writer changes one function:</p>
+
+      <pre class="code" data-label="lib/factor_agent/audit_log.ex" data-lang="Elixir"><code class="language-elixir">defmodule FactorAgent.AuditLog do
+  use GenServer
+
+  def start_link(_), do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
+
+  def init(events), do: {:ok, events}
+
+  def emit(event) do
+    GenServer.cast(__MODULE__, {:emit, Map.put(event, :ts, DateTime.utc_now())})
+  end
+
+  def all, do: GenServer.call(__MODULE__, :all)
+
+  def handle_cast({:emit, event}, events) do
+    IO.inspect(event, label: "AUDIT")
+    {:noreply, [event | events]}
+  end
+
+  def handle_call(:all, _from, events) do
+    {:reply, Enum.reverse(events), events}
+  end
+end</code></pre>
+
+      <h3>Agents</h3>
+
+      <p>Three workers: one fetches from public sources, one from internal docs, one composes. Each emits an audit event when it completes. Each tags its own output with a sensitivity product. The synthesis agent is the only one that performs the LCM join &mdash; nobody else is allowed to compose information from different trust regimes.</p>
+
+      <pre class="code" data-label="lib/factor_agent/agents.ex" data-lang="Elixir"><code class="language-elixir">defmodule FactorAgent.PublicAgent do
+  use GenServer
+  alias FactorAgent.{Labels, AuditLog}
+
+  def start_link(_), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
+  def init(state),   do: {:ok, state}
+
+  def run(query), do: GenServer.call(__MODULE__, {:run, query})
+
+  def handle_call({:run, query}, _from, state) do
+    result = %{
+      text:        "Public benchmark: churn rises with support volume.",
+      sensitivity: Labels.encode([])    # public → 1
+    }
+    AuditLog.emit(%{event: :public_agent_completed, query: query,
+                    sensitivity: result.sensitivity})
+    {:reply, result, state}
+  end
+end
+
+defmodule FactorAgent.DocsAgent do
+  use GenServer
+  alias FactorAgent.{Labels, AuditLog}
+
+  def start_link(_), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
+  def init(state),   do: {:ok, state}
+
+  def run(query), do: GenServer.call(__MODULE__, {:run, query})
+
+  def handle_call({:run, query}, _from, state) do
+    result = %{
+      text:        "Internal docs: Acme has rising tickets and delayed renewal.",
+      sensitivity: Labels.encode([:confidential, :customer_data])    # 3 × 13 = 39
+    }
+    AuditLog.emit(%{event: :docs_agent_completed, query: query,
+                    sensitivity: result.sensitivity})
+    {:reply, result, state}
+  end
+end
+
+defmodule FactorAgent.SynthesisAgent do
+  use GenServer
+  alias FactorAgent.{Labels, AuditLog}
+
+  def start_link(_), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
+  def init(state),   do: {:ok, state}
+
+  def run(parts), do: GenServer.call(__MODULE__, {:run, parts})
+
+  def handle_call({:run, parts}, _from, state) do
+    sensitivity =
+      parts
+      |> Enum.map(&amp; &amp;1.sensitivity)
+      |> Enum.reduce(1, &amp;Labels.join/2)             # LCM fold
+
+    text = parts |> Enum.map(&amp; &amp;1.text) |> Enum.join("\n\n")
+
+    result = %{text: "Combined answer:\n\n" &lt;&gt; text, sensitivity: sensitivity}
+
+    AuditLog.emit(%{event: :synthesis_completed,
+                    input_count: length(parts),
+                    output_sensitivity: sensitivity})
+    {:reply, result, state}
+  end
+end</code></pre>
+
+      <h3>Orchestrator</h3>
+
+      <p>The orchestrator runs the workflow, joins sensitivities, and checks the divisibility clearance against the runtime the caller declared. If the composed answer's sensitivity does not divide the runtime's capability, the response is <code style="color:var(--red)">:denied</code> &mdash; with the offending sensitivity returned, so the caller can see exactly which factors made the answer untransmittable.</p>
+
+      <pre class="code" data-label="lib/factor_agent/orchestrator.ex" data-lang="Elixir"><code class="language-elixir">defmodule FactorAgent.Orchestrator do
+  use GenServer
+  alias FactorAgent.{PublicAgent, DocsAgent, SynthesisAgent, Labels, AuditLog}
+
+  def start_link(_), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
+  def init(state),   do: {:ok, state}
+
+  def ask(query, runtime_capability) do
+    GenServer.call(__MODULE__, {:ask, query, runtime_capability})
+  end
+
+  def handle_call({:ask, query, runtime_capability}, _from, state) do
+    AuditLog.emit(%{event: :workflow_started, query: query,
+                    runtime_capability: runtime_capability})
+
+    public   = PublicAgent.run(query)
+    internal = DocsAgent.run(query)
+    composed = SynthesisAgent.run([public, internal])
+
+    response =
+      if Labels.allowed?(composed.sensitivity, runtime_capability) do
+        %{status: :ok,
+          answer: composed.text,
+          sensitivity: composed.sensitivity}
+      else
+        %{status: :denied,
+          reason: :insufficient_runtime_clearance,
+          sensitivity: composed.sensitivity}
+      end
+
+    AuditLog.emit(%{event: :workflow_completed,
+                    status: response.status,
+                    final_sensitivity: composed.sensitivity})
+
+    {:reply, response, state}
+  end
+end</code></pre>
+
+      <h3>Application Supervisor</h3>
+
+      <p>One supervisor, <code style="color:var(--cyan)">one_for_one</code> restart strategy. Any worker can crash without taking the rest with it &mdash; the OTP claim the essay was making, now actually wired up:</p>
+
+      <pre class="code" data-label="lib/factor_agent/application.ex" data-lang="Elixir"><code class="language-elixir">defmodule FactorAgent.Application do
+  use Application
+
+  def start(_type, _args) do
+    children = [
+      FactorAgent.AuditLog,
+      FactorAgent.PolicyEngine,
+      FactorAgent.ToolRegistry,
+      FactorAgent.PublicAgent,
+      FactorAgent.DocsAgent,
+      FactorAgent.SynthesisAgent,
+      FactorAgent.Orchestrator
+    ]
+    Supervisor.start_link(children, strategy: :one_for_one, name: FactorAgent.Supervisor)
+  end
+end</code></pre>
+
+      <h3>The Demo</h3>
+
+      <p>Two runs of the same query, against two different runtimes. Same agents, same data, same workflow. Different verdicts, because the arithmetic disagrees about who is allowed to see the answer.</p>
+
+      <pre class="code" data-label="Run 1 — query routed to an external LLM" data-lang="Elixir"><code class="language-elixir">alias FactorAgent.{Labels, Orchestrator}
+
+external_llm = Labels.encode([])    # 1 — public only
+
+Orchestrator.ask(
+  "Compare internal churn data with public market benchmarks",
+  external_llm
+)</code></pre>
+
+      <p>The audit log prints each step. The composed answer's sensitivity is the LCM of <code style="color:var(--purple)">1</code> (public) and <code style="color:var(--purple)">3 × 13 = 39</code> (confidential customer data) &mdash; which is <code style="color:var(--purple)">39</code>. The clearance check asks whether <code style="color:var(--purple)">39</code> divides <code style="color:var(--purple)">1</code>. It does not. Verdict:</p>
+
+      <div class="run-trace denied" data-label="Run 1 trace">
+        <span class="step">public_agent_completed <span class="arrow">&rarr;</span> sensitivity = <span class="num">1</span></span>
+        <span class="step">docs_agent_completed <span class="arrow">&rarr;</span> sensitivity = <span class="num">39</span>  &nbsp;<span style="color:var(--fg-3)"># confidential &times; customer_data</span></span>
+        <span class="step">synthesis_completed <span class="arrow">&rarr;</span> lcm(<span class="num">1</span>, <span class="num">39</span>) = <span class="num">39</span></span>
+        <span class="step">clearance check <span class="arrow">&rarr;</span> rem(<span class="num">1</span>, <span class="num">39</span>) = <span class="num">1</span> <span class="arrow">&ne;</span> <span class="num">0</span>  <span class="no">&times; FAIL</span></span>
+        <span class="verdict"><span class="label">denied</span> &nbsp; insufficient runtime clearance (sensitivity <span style="color:var(--red)">39</span>)</span>
+      </div>
+
+      <pre class="code" data-label="Run 2 — same query, routed to on-prem runtime" data-lang="Elixir"><code class="language-elixir">on_prem = Labels.encode([
+  :confidential, :customer_data, :pii, :finance, :eu_region
+])    # 3 × 5 × 7 × 11 × 13 = 15015
+
+Orchestrator.ask(
+  "Compare internal churn data with public market benchmarks",
+  on_prem
+)</code></pre>
+
+      <p>Same sensitivity (<code style="color:var(--purple)">39</code>). New runtime (<code style="color:var(--purple)">15015</code>). Now the check asks whether <code style="color:var(--purple)">39</code> divides <code style="color:var(--purple)">15015</code>. It does &mdash; both <code style="color:var(--purple)">3</code> and <code style="color:var(--purple)">13</code> are present as factors of the runtime's capability. Verdict:</p>
+
+      <div class="run-trace" data-label="Run 2 trace">
+        <span class="step">public_agent_completed <span class="arrow">&rarr;</span> sensitivity = <span class="num">1</span></span>
+        <span class="step">docs_agent_completed <span class="arrow">&rarr;</span> sensitivity = <span class="num">39</span></span>
+        <span class="step">synthesis_completed <span class="arrow">&rarr;</span> lcm(<span class="num">1</span>, <span class="num">39</span>) = <span class="num">39</span></span>
+        <span class="step">clearance check <span class="arrow">&rarr;</span> rem(<span class="num">15015</span>, <span class="num">39</span>) = <span class="num">0</span>  <span class="ok">&check; PASS</span></span>
+        <span class="verdict"><span class="label">ok</span> &nbsp; answer transmittable; sensitivity <span style="color:var(--green)">39</span> carried forward</span>
+      </div>
+
+      <p>That is the whole abstraction, executing. The composed answer inherits the highest sensitivity of its factors. Runtimes only see information they have clearance for. The denial is not a vibes call &mdash; it is one <code style="color:var(--cyan)">rem/2</code> evaluating to a non&#8209;zero integer.</p>
+
+      <h3>An Executable Harness</h3>
+
+      <p>Ning et al. conclude by calling for a new science of harness engineering: systems that are executable, inspectable, stateful, and governed.<sup class="cite" data-tip="Ning et al., Code as Agent Harness (2026)"><a href="#ref-45" style="color:inherit;text-decoration:none;">45</a></sup> One of their hardest open problems is local policy enforcement &mdash; safety and clearance decided by the harness substrate, not inferred from model confidence. <em>FactorAgent</em> is a minimal invariant-preserving harness runtime: not a chatbot, but the smallest OTP application where divisibility, LCM composition, and audit emission are the control plane.</p>
+
+      <pre class="figure good" data-label="Harness survey → FactorAgent runtime">Planning / orchestration     &rarr; Orchestrator GenServer
+Tool governance              &rarr; ToolRegistry + capability products
+Verification / policy        &rarr; Labels.allowed?/2 (divisibility)
+Shared harness state         &rarr; sensitivity tags carried on every agent output
+Runtime isolation            &rarr; Application supervisor, :one_for_one
+Auditability                 &rarr; AuditLog GenServer on every action</pre>
+
+      <h3>What the Demo Buys</h3>
+
+      <p>Every column of the bridge above now has a counterpart in code:</p>
+
+      <pre class="figure good" data-label="Bridge → runtime"><span style="color:var(--pink)">Primes</span>          &rarr; label catalog as distinct primes
+<span style="color:var(--purple)">LCM</span>             &rarr; SynthesisAgent's reduce/3 over join/2
+<span style="color:var(--cyan)">Divisibility</span>    &rarr; Orchestrator's allowed?/2 check
+<span style="color:var(--green)">OTP</span>             &rarr; Application supervisor, one_for_one strategy
+<span style="color:var(--yellow)">Tool registry</span>   &rarr; ToolRegistry GenServer with capability fields
+<span style="color:var(--orange)">Audit log</span>       &rarr; AuditLog GenServer, every action emits
+&rarr; Orchestrator    &rarr; coordinator; sole composer
+&rarr; Agents          &rarr; bounded workers; sensitivity-tagged outputs</pre>
+
+      <p>What this artifact is not: a production system. There is no real LLM, no real retrieval, no integrity lattice, no relational declassification, no quantity tracking, no persistence, no clustering. Each of those is a layer the essay has named and deferred. The point of FactorAgent is narrower &mdash; to show that the algebra the essay leans on for sixty pages of prose collapses into a single small OTP application, and that the application's behavior is determined by the algebra alone, not by anyone's confidence about what should and should not flow.</p>
+
+      <blockquote>If the abstraction is correct, the abstraction compiles.</blockquote>
+
+      <p>This one does.</p>
+
+      <p>At this point the loop closes. Primes gave us identity. OTP gave us supervised processes. Ihara gave us cycles. Denning gave us information flow. The repair calculus gave us bounded change. The article has been saying one thing in several dialects: durable systems preserve invariants while allowing local motion.</p>
+
+      <aside class="breakpoint" id="bp-finish" aria-label="Reading checkpoint">
+        <div class="bp-label">Checkpoint &middot; Finish line</div>
+        <p class="bp-title">You made it through the monograph</p>
+        <ul class="bp-recap">
+          <li>CODASYL harnesses &rarr; invariant algebra (Codd move).</li>
+          <li>FactorAgent proves the security slice; more artifacts welcome experiments.</li>
+        </ul>
+        <p class="bp-next">Optional: research agenda (§12a) and coda (§13).</p>
+        <div class="bp-actions"><a href="#artifacts">All artifacts</a><a href="#research-agenda">Research agenda</a><a href="#lesson">Coda</a></div>
+      </aside>
+
+      <h2 id="research-agenda" data-num="§ 12a / Research Agenda">Toward Invariant-Preserving Harness Engineering</h2>
+
+      <p>The harness literature has mapped the territory. This essay proposes the invariant layer beneath it. The next steps are falsifiable:</p>
+
+      <pre class="figure" data-label="Open research directions">Spectral metrics for workflow stability (ρ(A), prime-cycle counts on harness graphs)
+Algebraic capability enforcement in production runtimes (LCM joins, divisibility gates)
+Ultrametric memory repair with explicit blast-radius bounds
+Ihara-zeta analysis of retry and delegation topology under load
+Local-repair execution semantics (z' = z + kM) for workflow steps, not full restarts
+Transactional harness-state objects with declared read/write conflict policies
+Constraint-preserving workflow mutation under human approval gates
+OTP-style supervised agent harnesses at multi-tenant scale
+Typed executable provenance chains (H(a_t ‖ event_t)) across tool and memory writes</pre>
+
+      <p>Each item is a buildable experiment, not a slogan. The question for the field is no longer whether agents need harnesses. Ning et al. have settled that.<sup class="cite" data-tip="Ning et al., Code as Agent Harness (2026)"><a href="#ref-45" style="color:inherit;text-decoration:none;">45</a></sup> The question is whether the next era looks like more CODASYL &mdash; richer traversal, mutating graphs, orchestration-as-debugging &mdash; or like Codd: a substrate where composition is lawful and topology is derived.<sup class="cite" data-tip="Codd, A Relational Model of Data (1970)"><a href="#ref-46" style="color:inherit;text-decoration:none;">46</a></sup></p>
+
+      <section class="capstone">
+        <h2 id="lesson" data-num="§ 13 / Coda">The Final Lesson</h2>
+
+        <p>The next generation of AI systems will not be won by the largest agent loop. It will be won by the cleanest decomposition.</p>
+
+        <p>The systems that survive will be the ones that know:</p>
+
+        <pre class="figure" data-label="Knowable in production">where identity lives
+where state lives
+where memory lives
+where permissions live
+where side effects happen
+where failure is contained
+where auditability begins
+where human approval interrupts autonomy</pre>
+
+        <p>This is the old lesson returning in new clothes. Primes taught it in arithmetic. Erlang taught it in telecom. Agentic AI is being forced to learn it in production.</p>
+
+        <p>A demo agent can be a blob. A production agent must be factored.</p>
+
+        <blockquote>At small scale, intelligence impresses. At large scale, structure survives.</blockquote>
+      </section>
+
+      <details class="biblio">
+        <summary>
+          <span class="triangle"></span>
+          <span class="label">References</span>
+          <span>&amp; further reading</span>
+          <span class="count">46 entries</span>
+        </summary>
+        <div class="biblio-body">
+
+          <h3 class="cat">Erlang, OTP &amp; Actor Systems</h3>
+          <ol class="refs" start="1">
+            <li id="ref-1"><span class="author">Joe Armstrong.</span> <span class="title">Programming Erlang: Software for a Concurrent World</span>. <span class="venue">Pragmatic Bookshelf, 2nd ed., 2013.</span></li>
+            <li id="ref-2"><span class="author">Joe Armstrong.</span> <span class="title">Making Reliable Distributed Systems in the Presence of Software Errors</span>. <span class="venue">PhD thesis, KTH Royal Institute of Technology, 2003.</span></li>
+            <li id="ref-3"><span class="author">Ericsson OTP Team.</span> <span class="title">OTP Design Principles</span>. <span class="venue">Official Erlang documentation. <a href="https://www.erlang.org/doc/system/design_principles.html" target="_blank" rel="noopener">erlang.org</a></span></li>
+            <li id="ref-4"><span class="author">Francesco Cesarini &amp; Simon Thompson.</span> <span class="title">Erlang Programming</span>. <span class="venue">O&rsquo;Reilly, 2009.</span></li>
+            <li id="ref-5"><span class="author">Martin Logan, Eric Merritt &amp; Richard Carlsson.</span> <span class="title">Erlang and OTP in Action</span>. <span class="venue">Manning, 2010.</span></li>
+            <li id="ref-6"><span class="author">Gul Agha.</span> <span class="title">Actors: A Model of Concurrent Computation in Distributed Systems</span>. <span class="venue">MIT Press, 1986.</span></li>
+            <li id="ref-7"><span class="author">Carl Hewitt, Peter Bishop &amp; Richard Steiger.</span> &ldquo;<span class="title">A Universal Modular ACTOR Formalism for Artificial Intelligence</span>.&rdquo; <span class="venue">IJCAI, 1973.</span></li>
+            <li id="ref-8"><span class="author">Carl Hewitt.</span> &ldquo;<span class="title">Viewing Control Structures as Patterns of Passing Messages</span>.&rdquo; <span class="venue">Artificial Intelligence 8(3), 1977.</span></li>
+          </ol>
+
+          <h3 class="cat">Distributed Systems Foundations</h3>
+          <ol class="refs" start="9">
+            <li id="ref-9"><span class="author">Leslie Lamport.</span> &ldquo;<span class="title">Time, Clocks, and the Ordering of Events in a Distributed System</span>.&rdquo; <span class="venue">Communications of the ACM 21(7), 1978.</span></li>
+            <li id="ref-10"><span class="author">Leslie Lamport.</span> &ldquo;<span class="title">The Part-Time Parliament</span>.&rdquo; <span class="venue">ACM Transactions on Computer Systems 16(2), 1998.</span></li>
+            <li id="ref-11"><span class="author">Nancy Lynch.</span> <span class="title">Distributed Algorithms</span>. <span class="venue">Morgan Kaufmann, 1996.</span></li>
+            <li id="ref-12"><span class="author">Maarten van Steen &amp; Andrew Tanenbaum.</span> <span class="title">Distributed Systems</span>. <span class="venue">Pearson, 3rd ed., 2017.</span></li>
+            <li id="ref-13"><span class="author">Jim Gray &amp; Andreas Reuter.</span> <span class="title">Transaction Processing: Concepts and Techniques</span>. <span class="venue">Morgan Kaufmann, 1992.</span></li>
+            <li id="ref-14"><span class="author">Pat Helland.</span> &ldquo;<span class="title">Life Beyond Distributed Transactions</span>.&rdquo; <span class="venue">CIDR, 2007.</span></li>
+            <li id="ref-15"><span class="author">Werner Vogels.</span> &ldquo;<span class="title">Eventually Consistent</span>.&rdquo; <span class="venue">Communications of the ACM 52(1), 2009.</span></li>
+            <li id="ref-16"><span class="author">Eric Brewer.</span> &ldquo;<span class="title">CAP Twelve Years Later: How the &lsquo;Rules&rsquo; Have Changed</span>.&rdquo; <span class="venue">IEEE Computer 45(2), 2012.</span></li>
+          </ol>
+
+          <h3 class="cat">Information Flow Security &amp; Lattice Theory</h3>
+          <ol class="refs" start="17">
+            <li id="ref-17"><span class="author">Dorothy E. Denning.</span> &ldquo;<span class="title">A Lattice Model of Secure Information Flow</span>.&rdquo; <span class="venue">Communications of the ACM 19(5), 1976. <a href="https://faculty.nps.edu/dedennin/publications/lattice76.pdf" target="_blank" rel="noopener">pdf</a></span></li>
+            <li id="ref-18"><span class="author">Dorothy E. Denning &amp; Peter J. Denning.</span> &ldquo;<span class="title">Certification of Programs for Secure Information Flow</span>.&rdquo; <span class="venue">Communications of the ACM 20(7), 1977.</span></li>
+            <li id="ref-19"><span class="author">David Bell &amp; Leonard LaPadula.</span> <span class="title">Secure Computer Systems: Mathematical Foundations</span>. <span class="venue">MITRE Technical Report 2547, 1973.</span></li>
+            <li id="ref-20"><span class="author">Andrew C. Myers &amp; Barbara Liskov.</span> &ldquo;<span class="title">A Decentralized Model for Information Flow Control</span>.&rdquo; <span class="venue">SOSP, 1997.</span></li>
+            <li id="ref-21"><span class="author">Andrei Sabelfeld &amp; Andrew C. Myers.</span> &ldquo;<span class="title">Language-Based Information-Flow Security</span>.&rdquo; <span class="venue">IEEE Journal on Selected Areas in Communications 21(1), 2003.</span></li>
+            <li id="ref-22"><span class="author">Joseph A. Goguen &amp; Jos&eacute; Meseguer.</span> &ldquo;<span class="title">Security Policies and Security Models</span>.&rdquo; <span class="venue">IEEE Symposium on Security and Privacy, 1982.</span></li>
+            <li id="ref-23"><span class="author">Butler Lampson.</span> &ldquo;<span class="title">Protection</span>.&rdquo; <span class="venue">ACM Operating Systems Review 8(1), 1974. (Originally 1971 Princeton conference.)</span></li>
+            <li id="ref-24"><span class="author">Mark S. Miller, Ka-Ping Yee &amp; Jonathan Shapiro.</span> &ldquo;<span class="title">Capability Myths Demolished</span>.&rdquo; <span class="venue">Johns Hopkins University SRL technical report, 2003.</span></li>
+            <li id="ref-25"><span class="author">Whitfield Diffie &amp; Martin E. Hellman.</span> &ldquo;<span class="title">New Directions in Cryptography</span>.&rdquo; <span class="venue">IEEE Transactions on Information Theory 22(6), 1976.</span></li>
+            <li id="ref-26"><span class="author">Daniel J. Bernstein.</span> &ldquo;<span class="title">ChaCha, a variant of Salsa20</span>.&rdquo; <span class="venue">Workshop Record of SASC 2008.</span></li>
+          </ol>
+
+          <h3 class="cat">Fault Tolerance &amp; Reliability</h3>
+          <ol class="refs" start="27">
+            <li id="ref-27"><span class="author">David Parnas.</span> &ldquo;<span class="title">On the Criteria To Be Used in Decomposing Systems into Modules</span>.&rdquo; <span class="venue">Communications of the ACM 15(12), 1972.</span></li>
+            <li id="ref-28"><span class="author">Michael Nygard.</span> <span class="title">Release It!: Design and Deploy Production-Ready Software</span>. <span class="venue">Pragmatic Bookshelf, 2nd ed., 2018.</span></li>
+            <li id="ref-29"><span class="author">Richard I. Cook.</span> &ldquo;<span class="title">How Complex Systems Fail</span>.&rdquo; <span class="venue">Cognitive Technologies Laboratory, University of Chicago, 1998.</span></li>
+            <li id="ref-30"><span class="author">Sidney Dekker.</span> <span class="title">Drift Into Failure</span>. <span class="venue">Ashgate, 2011.</span></li>
+            <li id="ref-31"><span class="author">Betsy Beyer, Chris Jones, Jennifer Petoff &amp; Niall Murphy (eds.).</span> <span class="title">Site Reliability Engineering: How Google Runs Production Systems</span>. <span class="venue">O&rsquo;Reilly, 2016.</span></li>
+          </ol>
+
+          <h3 class="cat">Workflow Orchestration &amp; Deterministic Execution</h3>
+          <ol class="refs" start="32">
+            <li id="ref-32"><span class="author">Gregor Hohpe &amp; Bobby Woolf.</span> <span class="title">Enterprise Integration Patterns</span>. <span class="venue">Addison-Wesley, 2003.</span></li>
+            <li id="ref-33"><span class="author">Martin Kleppmann.</span> <span class="title">Designing Data-Intensive Applications</span>. <span class="venue">O&rsquo;Reilly, 2017.</span></li>
+            <li id="ref-34"><span class="author">Bernd R&uuml;cker.</span> <span class="title">Practical Process Automation</span>. <span class="venue">O&rsquo;Reilly, 2021.</span></li>
+          </ol>
+
+          <h3 class="cat">Retrieval, Bitmap &amp; Index Structures</h3>
+          <ol class="refs" start="35">
+            <li id="ref-35"><span class="author">Daniel Lemire et al.</span> &ldquo;<span class="title">Roaring Bitmaps: Implementation of an Optimized Software Library</span>.&rdquo; <span class="venue">Software: Practice and Experience 48(4), 2018. <a href="https://arxiv.org/abs/1709.07821" target="_blank" rel="noopener">arXiv:1709.07821</a></span></li>
+            <li id="ref-36"><span class="author">Samy Chambi, Daniel Lemire, Owen Kaser &amp; Robert Godin.</span> &ldquo;<span class="title">Better Bitmap Performance with Roaring Bitmaps</span>.&rdquo; <span class="venue">Software: Practice and Experience 46(5), 2016. <a href="https://arxiv.org/abs/1402.6407" target="_blank" rel="noopener">arXiv:1402.6407</a></span></li>
+            <li id="ref-37"><span class="author">Daniel Lemire et al.</span> &ldquo;<span class="title">Consistently Faster and Smaller Compressed Bitmaps with Roaring</span>.&rdquo; <span class="venue">2016. <a href="https://arxiv.org/abs/1603.06549" target="_blank" rel="noopener">arXiv:1603.06549</a></span></li>
+          </ol>
+
+          <h3 class="cat">Agents &amp; Modern Context</h3>
+          <ol class="refs" start="38">
+            <li id="ref-38"><span class="author">Timo Schick et al.</span> &ldquo;<span class="title">Toolformer: Language Models Can Teach Themselves to Use Tools</span>.&rdquo; <span class="venue">NeurIPS, 2023. <a href="https://arxiv.org/abs/2302.04761" target="_blank" rel="noopener">arXiv:2302.04761</a></span></li>
+          </ol>
+
+          <h3 class="cat">Graph Zeta &amp; Spectral Methods</h3>
+          <ol class="refs" start="39">
+            <li id="ref-39"><span class="author">Yasuro Ihara.</span> &ldquo;<span class="title">On the Zeta-Functions of a Finite Graph</span>.&rdquo; <span class="venue">in <em>Advanced Studies in Pure Mathematics</em> 11 (1986); preprint circulation 1966.</span></li>
+            <li id="ref-40"><span class="author">Hyman Bass.</span> &ldquo;<span class="title">Ihara&rsquo;s Zeta Function and a Tower of Intermediate Jacobians Associated with a Discrete Group</span>.&rdquo; <span class="venue">Inventiones Mathematicae 109(1), 1992.</span></li>
+            <li id="ref-41"><span class="author">Audrey Terras.</span> <span class="title">Zeta Functions of Graphs: A Stroll Through the Garden</span>. <span class="venue">Cambridge University Press, 2010.</span></li>
+          </ol>
+
+          <h3 class="cat">Companion Research Artifacts</h3>
+          <ol class="refs" start="42">
+            <li id="ref-42"><span class="author">Sethu Iyer.</span> <span class="title">Geometry of Conditional Logic</span>. <span class="venue">ShunyaBar Labs research repository, 2026. <a href="https://github.com/sethuiyer/geometry-of-conditional-logic" target="_blank" rel="noopener">GitHub</a></span></li>
+          </ol>
+
+          <h3 class="cat">OLAP, Cubes &amp; Aggregation Lattices</h3>
+          <ol class="refs" start="43">
+            <li id="ref-43"><span class="author">Jim Gray, Surajit Chaudhuri, Adam Bosworth, Andrew Layman, Don Reichart, Murali Venkatrao, Frank Pellow &amp; Hamid Pirahesh.</span> &ldquo;<span class="title">Data Cube: A Relational Aggregation Operator Generalizing Group-By, Cross-Tab, and Sub-Totals</span>.&rdquo; <span class="venue">Data Mining and Knowledge Discovery 1(1), 1997.</span></li>
+            <li id="ref-44"><span class="author">Venky Harinarayan, Anand Rajaraman &amp; Jeffrey D. Ullman.</span> &ldquo;<span class="title">Implementing Data Cubes Efficiently</span>.&rdquo; <span class="venue">SIGMOD, 1996.</span></li>
+          </ol>
+
+          <h3 class="cat">Agent Harnesses &amp; Executable Substrates</h3>
+          <ol class="refs" start="45">
+            <li id="ref-45"><span class="author">Xuying Ning, Katherine Tieu, Dongqi Fu, Tianxin Wei, Zihao Li, Yuanchen Bei, Jiaru Zou, Mengting Ai, Zhining Liu, Ting-Wei Li, Lingjie Chen, Yanjun Zhao, Ke Yang, Bingxuan Li, Cheng Qian, Gaotang Li, Xiao Lin, Zhichen Zeng, Ruizhong Qiu, Sirui Chen, Yifan Sun, Xiyuan Yang, Ruida Wang, Rui Pan, Chenyuan Yang, Dylan Zhang, Liri Fang, Zikun Cui, Yang Cao, Pan Chen, Dorothy Sun, Ren Chen, Mahesh Srinivasan, Nipun Mathur, Yinglong Xia, Hong Li, Hong Yan, Pan Lu, Lingming Zhang, Tong Zhang, Hanghang Tong &amp; Jingrui He.</span> &ldquo;<span class="title">Code as Agent Harness</span>.&rdquo; <span class="venue">arXiv:2605.18747, 2026. <a href="https://arxiv.org/abs/2605.18747" target="_blank" rel="noopener">arXiv:2605.18747</a></span></li>
+          </ol>
+
+          <h3 class="cat">Data Models &amp; Substrate Shifts</h3>
+          <ol class="refs" start="46">
+            <li id="ref-46"><span class="author">Edgar F. Codd.</span> &ldquo;<span class="title">A Relational Model of Data for Large Shared Data Banks</span>.&rdquo; <span class="venue">Communications of the ACM 13(6), 1970. <a href="https://doi.org/10.1145/362384.362685" target="_blank" rel="noopener">doi:10.1145/362384.362685</a></span></li>
+          </ol>
+
+          <p class="biblio-note">Sources are clustered roughly by the section that draws on them most heavily &mdash; but the intellectual structure of the essay is the cross-product, not the columns. Armstrong reads differently after Denning; Lemire reads differently after Lampson. The bibliography is an invitation to that cross-reading, not a partition.</p>
+
+        </div>
+      </details>
+
+      <footer class="colophon">
+        <div>ShunyaBar Labs &mdash; Essay № 02 &mdash; <a class="author-link" href="https://orcid.org/0009-0008-5446-2856" target="_blank" rel="noopener noreferrer">Sethu Iyer</a> <a class="orcid-link" href="https://orcid.org/0009-0008-5446-2856" target="_blank" rel="noopener noreferrer" title="ORCID iD 0009-0008-5446-2856">0009-0008-5446-2856</a></div>
+        <div>Set in Instrument Serif, Newsreader &amp; JetBrains Mono &middot; Paper &amp; Tokyo Night.</div>
+        <div class="end-sigil">∎</div>
+      </footer>
+
+    </article>
+
+    <nav class="sidebar" aria-label="Table of contents">
+      <div class="toc-label">Contents</div>
+      <ol class="toc">
+        <li><a href="#artifacts"><span class="num">&lambda;</span><span>Artifacts</span></a></li>
+        <li><a href="#diagnosis"><span class="num">&mdash;</span><span>Diagnosis &middot; Trap &middot; Thesis</span></a></li>
+        <li><a href="#codasyl-era"><span class="num">&mdash;</span><span>CODASYL Era</span></a></li>
+        <li><a href="#bp-spine"><span class="num">&curren;</span><span>Checkpoints</span></a></li>
+        <li><a href="#mistake"><span class="num">01</span><span>The Agentic Mistake</span></a></li>
+        <li><a href="#identity"><span class="num">02</span><span>Identity</span></a></li>
+        <li><a href="#hierarchy"><span class="num">03</span><span>Hierarchy</span></a></li>
+        <li><a href="#lattice"><span class="num">04</span><span>Non-Lattice Structure</span></a></li>
+        <li><a href="#asymptotic"><span class="num">05</span><span>Asymptotic Stability</span></a></li>
+        <li><a href="#capabilities"><span class="num">06</span><span>Capabilities</span></a></li>
+        <li><a href="#memory"><span class="num">07</span><span>State &amp; Memory</span></a></li>
+        <li><a href="#retrieval"><span class="num">08</span><span>Retrieval</span></a></li>
+        <li><a href="#security"><span class="num">09</span><span>Arithmetic Security</span></a></li>
+        <li><a href="#architecture"><span class="num">10</span><span>Architecture</span></a></li>
+        <li><a href="#harness-invariants"><span class="num">10a</span><span>Harness Invariants</span></a></li>
+        <li><a href="#bridge"><span class="num">11</span><span>Prime&ndash;Erlang Bridge</span></a></li>
+        <li><a href="#factoragent"><span class="num">12</span><span>FactorAgent</span></a></li>
+        <li><a href="#research-agenda"><span class="num">12a</span><span>Research Agenda</span></a></li>
+        <li><a href="#lesson"><span class="num">13</span><span>The Final Lesson</span></a></li>
+      </ol>
+    </nav>
+
+  </div>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var toggle = document.getElementById("color-mode-toggle");
+
+    function applyMode(mode, persist) {
+      if (mode !== "light" && mode !== "dark") {
+        mode = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      }
+      var changed = root.getAttribute("data-theme") !== mode;
+      root.setAttribute("data-theme", mode);
+      if (toggle) {
+        toggle.setAttribute("aria-label", mode === "light" ? "Switch to dark mode" : "Switch to light mode");
+        toggle.setAttribute("aria-pressed", mode === "dark" ? "true" : "false");
+      }
+      if (persist) {
+        localStorage.setItem("sbl-essay-color-mode", mode);
+        localStorage.removeItem("sbl-essay-theme");
+      }
+      if (changed) {
+        window.dispatchEvent(new Event("essay-theme-change"));
+      }
+    }
+
+    if (toggle) {
+      toggle.addEventListener("click", function () {
+        var next = root.getAttribute("data-theme") === "light" ? "dark" : "light";
+        root.classList.add("theme-transition");
+        applyMode(next, true);
+        window.setTimeout(function () {
+          root.classList.remove("theme-transition");
+        }, 250);
+      });
+    }
+
+    applyMode(root.getAttribute("data-theme") || "dark", false);
+
+    window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", function (e) {
+      if (localStorage.getItem("sbl-essay-color-mode")) return;
+      applyMode(e.matches ? "light" : "dark", false);
+    });
+  })();
+
+  const links = Array.from(document.querySelectorAll('.toc a'));
+  const sections = links.map(l => document.querySelector(l.getAttribute('href'))).filter(Boolean);
+  const progressBar = document.querySelector('.reading-progress');
+
+  const onScroll = () => {
+    const y = window.scrollY + 120;
+    let current = sections[0];
+    for (const s of sections) {
+      if (s.offsetTop <= y) current = s;
+    }
+    const currentId = current ? current.id : '';
+    links.forEach(l => {
+      const active = l.getAttribute('href') === '#' + currentId;
+      l.classList.toggle('is-active', active);
+      if (active) l.setAttribute('aria-current', 'location');
+      else l.removeAttribute('aria-current');
+    });
+
+    if (progressBar) {
+      const doc = document.documentElement;
+      const max = doc.scrollHeight - doc.clientHeight;
+      const pct = max > 0 ? Math.min(100, Math.round((window.scrollY / max) * 100)) : 0;
+      progressBar.style.width = pct + '%';
+      progressBar.setAttribute('aria-valuenow', String(pct));
+    }
+  };
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+</script>
+
+</body>
+</html>
