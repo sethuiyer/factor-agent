@@ -1,5 +1,8 @@
 # Factor-Agent
 
+![logo](./logo.webp)
+
+
 A prime-factorized, invariant-preserving multi-agent runtime inspired by Erlang/OTP, distributed systems theory, and information-flow algebra.
 Built for agents that survive production scale — not just demos.
 
